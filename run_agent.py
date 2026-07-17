@@ -19,7 +19,9 @@ import sys
 
 # 检查环境变量
 if not os.environ.get("OPENAI_API_KEY"):
-    os.environ["OPENAI_API_KEY"] = "sk-af80f067547940dbb092d870956d5dbb"
+    print("[ERROR] 请先设置 OPENAI_API_KEY 环境变量")
+    print("  set OPENAI_API_KEY=你的deepseek_api_key")
+    sys.exit(1)
 if not os.environ.get("OPENAI_BASE_URL"):
     os.environ["OPENAI_BASE_URL"] = "https://api.deepseek.com/v1"
 

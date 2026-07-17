@@ -14,7 +14,7 @@ from typing import AsyncGenerator
 from functools import lru_cache
 
 # Configure DeepSeek before importing langchain
-os.environ.setdefault("OPENAI_API_KEY", "sk-af80f067547940dbb092d870956d5dbb")
+os.environ.setdefault("OPENAI_API_KEY", "your-deepseek-api-key")
 os.environ.setdefault("OPENAI_BASE_URL", "https://api.deepseek.com/v1")
 
 from fastapi import FastAPI, HTTPException

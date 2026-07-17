@@ -5,8 +5,11 @@ Registers the DeepSeek provider profile, then starts dcode.
 import os
 import sys
 
-os.environ["OPENAI_API_KEY"] = "sk-af80f067547940dbb092d870956d5dbb"
-os.environ["OPENAI_BASE_URL"] = "https://api.deepseek.com/v1"
+if "OPENAI_API_KEY" not in os.environ:
+    print("[ERROR] 请先设置 OPENAI_API_KEY 环境变量")
+    print("  set OPENAI_API_KEY=你的deepseek_api_key")
+    sys.exit(1)
+os.environ.setdefault("OPENAI_BASE_URL", "https://api.deepseek.com/v1")
 
 # Register DeepSeek provider profile before dcode starts
 from deepagents import register_provider_profile, ProviderProfile
