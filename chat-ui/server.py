@@ -67,7 +67,7 @@ checkpointer = InMemorySaver()
 # --- Backend: LocalShellBackend (enables execute + filesystem) ---
 backend = LocalShellBackend(
     root_dir=str(PROJECT_DIR),
-    virtual_mode=True,  # sandbox paths to project root
+    virtual_mode=False,  # allow real Windows paths
     timeout=120,
     max_output_bytes=200_000,
 )
