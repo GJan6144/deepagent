@@ -95,7 +95,7 @@
 
         .message-row { max-width: 800px; margin: 0 auto 20px; padding: 0 24px; display: flex; gap: 10px; }
         .message-row.user { flex-direction: row-reverse; }
-        .avatar { width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; white-space: nowrap; }
+        .avatar { width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; white-space: nowrap; }
         .avatar.ai, .avatar.assistant { background: var(--accent); color: white; }
         .avatar.user { background: #c5d8ff; color: #185fa5; }
         .bubble-wrap { max-width: 70%; min-width: 0; }
@@ -471,48 +471,54 @@
 
         async function selectSession(id) {
             currentSessionId = id;
-            const [msgRes, sessRes, fbRes] = await Promise.all([
-                fetch(`/api/sessions/${id}/messages`),
-                fetch('/api/sessions'),
-                fetch(`/api/feedback/${id}`),
-            ]);
-            const messages = await msgRes.json();
-            currentEmpty = messages.length === 0;
-            const sessions = await sessRes.json();
-            const feedbackList = await fbRes.json();
-            const fbMap = {};
-            feedbackList.forEach(f => fbMap[f.message_id] = f.rating);
-            const session = sessions.find(s => s.id === id);
-            document.getElementById('chatTitle').textContent = session ? session.title : 'Chat';
             const container = document.getElementById('messagesContainer');
-            container.innerHTML = '';
-            if (messages.length === 0) showWelcome();
-            else {
-                messages.forEach(m => {
-                    if (m.role === 'thinking') {
-                        // Reconstruct thinking block
-                        const tb = document.createElement('div');
-                        tb.className = 'thinking-block';
-                        tb.innerHTML = `
-                            <div class="thinking-header" onclick="this.parentElement.querySelector('.thinking-content').classList.toggle('collapsed'); this.querySelector('.thinking-toggle').classList.toggle('open');">
-                                <span class="thinking-icon">&#9776;</span>
-                                <span>Thinking</span>
-                                <span class="thinking-toggle">&#9662;</span>
-                            </div>
-                            <div class="thinking-content collapsed">${escapeHtml(m.content)}</div>`;
-                        container.appendChild(tb);
-                        return;
-                    }
-                    const obj = appendMessage(m.role, m.content, m.id);
-                    if (m.role === 'assistant') {
-                        const rating = fbMap[m.id];
-                        if (rating === 'like') obj.actions.querySelector('.like-btn')?.classList.add('active');
-                        if (rating === 'dislike') obj.actions.querySelector('.dislike-btn')?.classList.add('active');
-                    }
-                });
+            container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-secondary)">Loading...</div>';
+            try {
+                const [msgRes, sessRes, fbRes] = await Promise.all([
+                    fetch(`/api/sessions/${id}/messages`),
+                    fetch('/api/sessions'),
+                    fetch(`/api/feedback/${id}`),
+                ]);
+                const messages = await msgRes.json();
+                currentEmpty = messages.length === 0;
+                const sessions = await sessRes.json();
+                let feedbackList = [];
+                try { feedbackList = await fbRes.json(); } catch(e) {}
+                const fbMap = {};
+                feedbackList.forEach(f => fbMap[f.message_id] = f.rating);
+                const session = sessions.find(s => s.id === id);
+                document.getElementById('chatTitle').textContent = session ? session.title : 'Chat';
+                container.innerHTML = '';
+                if (messages.length === 0) showWelcome();
+                else {
+                    messages.forEach(m => {
+                        if (m.role === 'thinking') {
+                            const tb = document.createElement('div');
+                            tb.className = 'thinking-block';
+                            tb.innerHTML = `
+                                <div class="thinking-header" onclick="this.parentElement.querySelector('.thinking-content').classList.toggle('collapsed'); this.querySelector('.thinking-toggle').classList.toggle('open');">
+                                    <span class="thinking-icon">&#9776;</span>
+                                    <span>Thinking</span>
+                                    <span class="thinking-toggle">&#9662;</span>
+                                </div>
+                                <div class="thinking-content collapsed">${escapeHtml(m.content)}</div>`;
+                            container.appendChild(tb);
+                            return;
+                        }
+                        const obj = appendMessage(m.role, m.content, m.id);
+                        if (m.role === 'assistant') {
+                            const rating = fbMap[m.id];
+                            if (rating === 'like') obj.actions.querySelector('.like-btn')?.classList.add('active');
+                            if (rating === 'dislike') obj.actions.querySelector('.dislike-btn')?.classList.add('active');
+                        }
+                    });
+                }
+                await loadSessions();
+                scrollToBottom();
+            } catch (err) {
+                container.innerHTML = '<div style="text-align:center;padding:40px;color:#e44">Error loading: ' + escapeHtml(err.message) + '</div>';
+                console.error('selectSession error:', err);
             }
-            await loadSessions();
-            scrollToBottom();
         }
 
         function handleKeyDown(event) {
@@ -691,7 +697,7 @@
             row.className = 'message-row ' + role;
             const mid = msgId || ('temp_' + Date.now() + '_' + Math.random().toString(36).slice(2,8));
             row.innerHTML = `
-                <div class="avatar ${role}">${isUser ? 'You' : 'Deep Agents'}</div>
+                <div class="avatar ${role}">${isUser ? 'You' : '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>'}</div>
                 <div class="bubble-wrap">
                     <div class="bubble ${role}">${content ? renderMarkdown(content) : ''}</div>
                     <div class="msg-actions ${isUser ? 'right' : ''}"></div>
