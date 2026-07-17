@@ -46,8 +46,10 @@
             border-right: 1px solid var(--border);
             display: flex;
             flex-direction: column;
-            transition: transform 0.3s ease;
+            transition: margin-left 0.3s ease;
+            overflow: hidden;
         }
+        .sidebar.collapsed { margin-left: -280px; }
 
         .sidebar-header { padding: 16px; }
         .logo { font-size: 18px; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 8px; }
@@ -74,7 +76,9 @@
         .chat-area { flex: 1; display: flex; flex-direction: column; background: var(--bg-primary); min-width: 0; }
         .chat-header { padding: 14px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; min-height: 56px; }
         .chat-title { font-size: 16px; font-weight: 600; flex: 1; }
-        .menu-toggle { display: none; background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-secondary); }
+        .menu-toggle { display: flex; align-items: center; gap: 4px; background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-secondary); padding: 4px 6px; border-radius: 6px; transition: background 0.15s; }
+        .menu-toggle:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .menu-toggle svg { width: 18px; height: 18px; }
 
         .messages-container { flex: 1; overflow-y: auto; padding: 24px 0; }
         .messages-container::-webkit-scrollbar { width: 6px; }
@@ -188,8 +192,8 @@
         .center-modal .btn-danger:hover { background: #c33; }
 
         @media (max-width: 768px) {
-            .sidebar { position: fixed; left: 0; top: 0; height: 100vh; z-index: 100; transform: translateX(-100%); }
-            .sidebar.open { transform: translateX(0); }
+            .sidebar { position: fixed; left: 0; top: 0; height: 100vh; z-index: 100; margin-left: 0; }
+            .sidebar.collapsed { margin-left: -280px; }
             .menu-toggle { display: block; }
             .welcome-suggestions { grid-template-columns: 1fr; }
             .bubble-wrap { max-width: 85%; }
@@ -218,7 +222,9 @@
 
     <main class="chat-area">
         <div class="chat-header">
-            <button class="menu-toggle" onclick="toggleSidebar()">&#9776;</button>
+            <button class="menu-toggle" onclick="toggleSidebar()" title="收缩侧边栏">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
             <div class="chat-title" id="chatTitle">Deep Agents Chat</div>
         </div>
         <div class="messages-container" id="messagesContainer"></div>
@@ -632,7 +638,16 @@
         }
 
         function useSuggestion(text) { const input = document.getElementById('chatInput'); input.value = text; input.focus(); autoResize(input); }
-        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const btn = document.querySelector('.menu-toggle');
+            sidebar.classList.toggle('collapsed');
+            const collapsed = sidebar.classList.contains('collapsed');
+            btn.title = collapsed ? '展开侧边栏' : '收缩侧边栏';
+            btn.innerHTML = collapsed
+                ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="9" y1="18" x2="15" y2="12"/><line x1="9" y1="6" x2="15" y2="12"/></svg>'
+                : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>';
+        }
 
         function showWelcome() {
             document.getElementById('messagesContainer').innerHTML = `
@@ -666,7 +681,7 @@
             row.className = 'message-row ' + role;
             const mid = msgId || ('temp_' + Date.now() + '_' + Math.random().toString(36).slice(2,8));
             row.innerHTML = `
-                <div class="avatar ${role}">${isUser ? 'You' : 'AI'}</div>
+                <div class="avatar ${role}">${isUser ? 'You' : 'Deep Agents'}</div>
                 <div class="bubble-wrap">
                     <div class="bubble ${role}">${content ? renderMarkdown(content) : ''}</div>
                     <div class="msg-actions ${isUser ? 'right' : ''}"></div>
