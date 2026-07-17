@@ -11,7 +11,6 @@ from datetime import datetime
 from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
-from functools import lru_cache
 
 # Configure DeepSeek before importing langchain
 _env_file = Path(__file__).parent / ".env"
@@ -89,7 +88,58 @@ def get_project_info() -> str:
     )
     return result.stdout or "Project info unavailable."
 
-custom_tools = [get_project_info]
+@tool
+def get_current_time(timezone: str = "Asia/Shanghai") -> str:
+    """Get the current date and time. Optionally specify a timezone (e.g. 'UTC', 'Asia/Shanghai', 'America/New_York')."""
+    from datetime import datetime, timezone as _tz
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo(timezone)
+        now = datetime.now(tz)
+    except Exception:
+        now = datetime.now(_tz.utc)
+    return now.strftime("%Y-%m-%d %H:%M:%S %Z")
+
+@tool
+def web_fetch(url: str, max_chars: int = 8000) -> str:
+    """Fetch a web page and extract its readable text content. Use this to read articles, docs, or any URL. Returns plain text (truncated to max_chars)."""
+    import requests
+    from bs4 import BeautifulSoup
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        r = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+        for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
+            tag.decompose()
+        text = soup.get_text(separator="\n", strip=True)
+        text = "\n".join(line for line in text.split("\n") if line.strip())
+        if len(text) > max_chars:
+            text = text[:max_chars] + f"\n\n... (truncated, total {len(text)} chars)"
+        return f"URL: {url}\n\n{text}"
+    except Exception as e:
+        return f"Error fetching {url}: {e}"
+
+@tool
+def web_search(query: str, max_results: int = 5) -> str:
+    """Search the web for current information. Returns a list of {title, url, snippet} for the top results."""
+    from duckduckgo_search import DDGS
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=max_results))
+        if not results:
+            return f"No results found for: {query}"
+        out = [f"Search results for: {query}\n"]
+        for i, r in enumerate(results, 1):
+            out.append(f"{i}. {r.get('title','')}")
+            out.append(f"   URL: {r.get('href','')}")
+            out.append(f"   {r.get('body','')}\n")
+        return "\n".join(out)
+    except Exception as e:
+        return f"Search error: {e}"
+
+base_tools = [get_project_info, get_current_time, web_fetch]
+search_tool = [web_search]
 
 # --- Subagents ---
 subagents = [
@@ -112,9 +162,9 @@ skills = [str(SKILLS_DIR)]
 rubric_middleware = None
 
 # --- Agent Factory ---
-@lru_cache(maxsize=1)
-def build_agent():
-    """Build the full-featured agent (cached across requests)."""
+def build_agent(use_search: bool = False):
+    """Build the agent with optional search tool. Rebuilt per request so the toolset reflects the user's current toggle."""
+    tools = base_tools + (search_tool if use_search else [])
     return create_deep_agent(
         model="openai:deepseek-v4-flash",
         backend=backend,
@@ -195,6 +245,7 @@ class CreateSessionRequest(BaseModel):
 class SendMessageRequest(BaseModel):
     session_id: str
     content: str
+    use_search: bool = False
 
 class UpdateTitleRequest(BaseModel):
     title: str
@@ -364,7 +415,7 @@ async def chat(req: SendMessageRequest):
             messages.append(AIMessage(content=h["content"]))
 
     # Invoke the full-featured agent
-    agent = build_agent()
+    agent = build_agent(use_search=req.use_search)
 
     thread_id = f"thread_{req.session_id}"
 

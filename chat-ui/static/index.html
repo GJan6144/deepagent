@@ -116,9 +116,15 @@
         .suggestion-desc { font-size: 13px; color: var(--text-secondary); }
 
         .input-area { padding: 16px 24px 20px; }
-        .input-wrapper { max-width: 800px; margin: 0 auto; display: flex; align-items: flex-end; gap: 12px; background: var(--bg-input); border-radius: 16px; padding: 8px 8px 8px 20px; border: 1px solid transparent; transition: border-color 0.2s; }
+        .input-wrapper { max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 4px; background: var(--bg-input); border-radius: 16px; padding: 12px 12px 8px 20px; border: 1px solid transparent; transition: border-color 0.2s; }
         .input-wrapper:focus-within { border-color: var(--accent); }
-        .chat-input { flex: 1; border: none; background: none; outline: none; font-size: 15px; font-family: inherit; resize: none; max-height: 200px; min-height: 24px; line-height: 1.6; padding: 8px 0; }
+        .chat-input { width: 100%; border: none; background: none; outline: none; font-size: 15px; font-family: inherit; resize: none; max-height: 200px; min-height: 24px; line-height: 1.6; padding: 4px 0; }
+        .input-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .toolbar-left { display: flex; gap: 6px; }
+        .feature-toggle { display: inline-flex; align-items: center; gap: 4px; background: none; border: 0.5px solid var(--border); border-radius: 16px; padding: 4px 10px; font-size: 12px; color: var(--text-secondary); cursor: pointer; transition: all 0.2s; font-family: inherit; }
+        .feature-toggle:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .feature-toggle.active { background: rgba(77, 107, 254, 0.08); border-color: var(--accent); color: var(--accent); }
+        .feature-toggle svg { width: 12px; height: 12px; }
         .send-btn { width: 36px; height: 36px; border: none; border-radius: 50%; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s; }
         .send-btn.send { background: var(--accent); }
         .send-btn.send:hover { background: var(--accent-hover); }
@@ -220,9 +226,17 @@
             <div class="input-wrapper">
                 <textarea class="chat-input" id="chatInput" placeholder="Send a message..." rows="1"
                     onkeydown="handleKeyDown(event)" oninput="autoResize(this)"></textarea>
-                <button class="send-btn send" id="sendBtn" onclick="sendMessage()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                </button>
+                <div class="input-toolbar">
+                    <div class="toolbar-left">
+                        <button class="feature-toggle" id="searchToggle" onclick="toggleSearch()" title="启用/关闭联网搜索">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                            <span>智能搜索</span>
+                        </button>
+                    </div>
+                    <button class="send-btn send" id="sendBtn" onclick="sendMessage()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    </button>
+                </div>
             </div>
         </div>
     </main>
@@ -232,7 +246,7 @@
         let isStreaming = false;
         let abortController = null;
         let currentEmpty = false;  // whether the current session has no messages
-        let messageIdMap = {};  // DOM element -> message id mapping for feedback
+        let useSearch = false;     // 联网搜索开关（默认关闭）
 
         window.onload = function() { showWelcome(); loadSessions(); };
 
@@ -497,6 +511,12 @@
             }
         }
 
+        function toggleSearch() {
+            useSearch = !useSearch;
+            const btn = document.getElementById('searchToggle');
+            btn.classList.toggle('active', useSearch);
+        }
+
         function setButtonMode(mode) {
             const btn = document.getElementById('sendBtn');
             btn.className = 'send-btn ' + mode;
@@ -541,7 +561,7 @@
                 const res = await fetch('/api/chat', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({session_id: currentSessionId, content}),
+                    body: JSON.stringify({session_id: currentSessionId, content, use_search: useSearch}),
                     signal: signal,
                 });
                 const reader = res.body.getReader();
