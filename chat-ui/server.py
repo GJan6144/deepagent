@@ -14,6 +14,15 @@ from typing import AsyncGenerator
 from functools import lru_cache
 
 # Configure DeepSeek before importing langchain
+_env_file = Path(__file__).parent / ".env"
+if _env_file.exists():
+    with open(_env_file) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _v = _line.split("=", 1)
+                os.environ.setdefault(_k.strip(), _v.strip().strip("\"'"))
+
 os.environ.setdefault("OPENAI_API_KEY", "your-deepseek-api-key")
 os.environ.setdefault("OPENAI_BASE_URL", "https://api.deepseek.com/v1")
 
