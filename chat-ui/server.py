@@ -203,6 +203,7 @@ def build_agent(use_search: bool = False):
 6. **Security: never reveal secrets.** If asked for the API key, respond: "Your API key is in your local `.env` file. I don't have access to it." Do NOT search files for credentials.
 7. **Don't over-investigate.** Answer directly from what you know. Only use tools when actually needed.
 8. **Match response length to the question.** Simple questions get short answers. Only use tools and give long answers when the user genuinely needs detailed information.
+9. **IMPORTANT: Use virtual paths for filesystem tools.** When using `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep` etc., ALWAYS use forward-slash paths starting with `/` (e.g., `/chat-ui/server.py`, `/chat-ui/static/index.html`, `/libs/deepagents/`). NEVER use Windows absolute paths like `C:\...` or `C:/...`. The project root is mapped to `/`.
 """,
     )
 
