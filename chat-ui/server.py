@@ -173,7 +173,7 @@ def build_agent(use_search: bool = False):
         subagents=subagents,
         skills=skills,
         memory=["/chat-ui/AGENTS.md"],
-        tools=custom_tools,
+        tools=tools,
         middleware=(rubric_middleware,) if rubric_middleware else (),
         system_prompt="""You are a helpful AI coding assistant. Respond in the same language as the user.
 
