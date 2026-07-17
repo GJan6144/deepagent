@@ -1,112 +1,124 @@
+# Deep Agents - Local Chat UI
+
 <div align="center">
-  <a href="https://docs.langchain.com/oss/python/deepagents/overview#deep-agents-overview">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset=".github/images/logo-dark.svg">
-      <source media="(prefers-color-scheme: light)" srcset=".github/images/logo-light.svg">
-      <img alt="Deep Agents Logo" src=".github/images/logo-dark.svg" width="50%">
-    </picture>
-  </a>
+  <p>A locally deployed <a href="https://github.com/langchain-ai/deepagents">Deep Agents</a> with a web-based Chat UI, powered by DeepSeek v4 Flash.</p>
 </div>
 
 <div align="center">
-  <h3>The batteries-included agent harness.</h3>
-</div>
-
-<div align="center">
-  <a href="https://opensource.org/licenses/MIT" target="_blank"><img src="https://img.shields.io/pypi/l/deepagents" alt="PyPI - License"></a>
-  <a href="https://pypistats.org/packages/deepagents" target="_blank"><img src="https://img.shields.io/pepy/dt/deepagents" alt="PyPI - Downloads"></a>
-  <a href="https://pypi.org/project/deepagents/#history" target="_blank"><img src="https://img.shields.io/pypi/v/deepagents?label=%20" alt="Version"></a>
-  <a href="https://x.com/langchain_oss" target="_blank"><img src="https://img.shields.io/twitter/url/https/twitter.com/langchain_oss.svg?style=social&label=Follow%20%40LangChain" alt="Twitter / X"></a>
+  <img src=".github/images/logo-dark.svg" width="40%" alt="Deep Agents Logo">
 </div>
 
 <br>
 
-Deep Agents is an open source agent harness — an opinionated agent that runs out of the box. Extend, override, or replace any piece.
+## Overview
 
-**Principles:**
+This project is a local deployment of LangChain's **Deep Agents** framework with a custom web chat interface, similar to DeepSeek Chat or ChatGPT. It provides:
 
-- **Opinionated** — defaults tuned for long-horizon, multi-step work
-- **Extensible** — override or replace any piece without forking
-- **Model-agnostic** — works with any LLM that supports tool calling: frontier, open-weight, or local
-- **Production-ready** — built on LangGraph (streaming, persistence, checkpointing) with first-class tracing, evaluation, and deployment via LangSmith
+- **Web Chat UI** — browser-based chat interface with session management, streaming responses, and message history
+- **Full Framework Capabilities** — shell execution, filesystem access, sub-agents, skills, memory, and more
+- **DeepSeek Integration** — uses DeepSeek v4 Flash via OpenAI-compatible API
+- **Local Deployment** — runs entirely on your machine, no cloud dependencies
 
-**Features include:**
+## Quick Start
 
-- **Sub-agents** — delegate tasks to agents with isolated context windows
-- **Filesystem** — read, write, edit, or search over pluggable local, sandboxed, or remote backends
-- **Context management** — summarize long threads and offload tool outputs to disk
-- **Shell access** — run commands in your sandbox of choice
-- **Persistent memory** — pluggable state and store backends for cross-session recall
-- **Human-in-the-loop** — approve, edit, or reject tool calls before they run
-- **Skills** — reusable behaviors the agent can load on demand
-- **Tools** — bring your own functions or any MCP server
+### Prerequisites
 
-Deep Agents is available as a JavaScript/TypeScript library — see [deepagents.js](https://github.com/langchain-ai/deepagentsjs).
+- Python 3.11+
+- [uv](https://docs.astral.sh/uv/) package manager
 
-> [!NOTE]
-> **Deep Agents Code** — a pre-built coding agent in your terminal, similar to Claude Code or Cursor, powered by any LLM. Install with `curl -LsSf https://langch.in/dcode | bash`. See the [documentation](https://docs.langchain.com/deepagents-code) for the full feature set.
-
-## Quickstart
+### Setup
 
 ```bash
-uv add deepagents
+# Install dependencies for each package
+cd libs/deepagents && uv sync --all-groups
+cd ../code && uv sync --all-groups
+cd ../cli && uv sync --all-groups
+cd ../../chat-ui
 ```
 
-```python
-from deepagents import create_deep_agent
+### Configure Model
 
-agent = create_deep_agent(
-    model="openai:gpt-5.5",
-    tools=[my_custom_tool],
-    system_prompt="You are a research assistant.",
-)
-result = agent.invoke({"messages": "Research LangGraph and write a summary"})
+Set environment variables before starting:
+
+```bash
+set OPENAI_API_KEY=your_deepseek_api_key
+set OPENAI_BASE_URL=https://api.deepseek.com/v1
 ```
 
-The agent can plan, read/write files, and manage its own context. Add your own tools, swap models, customize prompts, configure sub-agents, and more. See the [documentation](https://docs.langchain.com/oss/python/deepagents/overview) for full details.
+### Run
 
-> [!TIP]
-> For developing, debugging, and deploying AI agents and LLM applications, see [LangSmith](https://docs.langchain.com/langsmith/home).
+```bash
+# Option 1: Start Chat UI
+start.bat       # or double-click start.bat
 
-## FAQ
+# Option 2: Python SDK interactive mode
+python run_agent.py
 
-### How is this different from LangGraph or LangChain?
+# Option 3: dcode terminal agent
+run_dcode.bat   # or run_dcode.ps1
+```
 
-LangGraph is the graph runtime. LangChain's `create_agent` is a minimal agent harness on top of it. Deep Agents is a more opinionated harness on top of `create_agent` — same building blocks, but with filesystem, sub-agents, context management, and skills bundled in. For how the three relate, see the [LangChain ecosystem overview](https://docs.langchain.com/oss/python/concepts/products).
+Then open **http://localhost:8765** in your browser.
 
-### Does this work with open-weight or local models?
+## Chat UI Features
 
-Yes. Any model that supports tool calling works — frontier APIs (OpenAI, Anthropic, Google), open-weight models hosted on providers like Baseten or Fireworks, and self-hosted models via Ollama, vLLM, or llama.cpp. Use any [LangChain chat model](https://docs.langchain.com/oss/python/langchain/models).
+| Feature | Description |
+|---------|-------------|
+| **Session Management** | Create, rename, delete conversations. Sessions grouped by Today / 7 days / 30 days / Monthly |
+| **Pin Sessions** | Pin important conversations to the top |
+| **Streaming Responses** | Real-time token streaming with stop button |
+| **Message Actions** | Copy, regenerate, like/dislike feedback per message |
+| **Thinking Display** | Collapsible reasoning/thinking section (model-dependent) |
+| **Cross-session Memory** | AGENTS.md stores user info across conversations |
+| **Inline Rename** | Click to edit conversation titles directly |
+| **Delete Confirmation** | Not-destructive delete with confirmation modal |
 
-### Can I use this in production?
+## Capabilities
 
-Yes! Deep Agents is built on LangGraph, designed for production agent deployments. Pair it with [LangSmith](https://docs.langchain.com/langsmith/home) for tracing, evaluation, and monitoring. See [Going to production](https://docs.langchain.com/oss/python/deepagents/going-to-production) for the full guide.
+This deployment enables all Deep Agents framework capabilities:
 
-### When should I use Deep Agents vs. LangChain or LangGraph directly?
+| Capability | Status |
+|------------|--------|
+| Shell Execution (`execute`) | ✅ Enabled |
+| Filesystem Tools (ls, read, write, edit, glob) | ✅ Enabled |
+| Framework Memory (AGENTS.md) | ✅ Enabled |
+| Skills System | ✅ Enabled |
+| Sub-Agents (sync) | ✅ Enabled |
+| Checkpointer | ✅ Enabled |
+| Custom Tools | ✅ Enabled |
+| Auto Summarization | ✅ Enabled |
+| Tool Call Repair | ✅ Enabled |
+| Todo List | ✅ Enabled |
+| Human-in-the-loop | ⏳ Optional |
+| Async Sub-Agents | ⏳ Needs remote server |
+| Rubric Evaluation | ⏳ Optional |
 
-All three are layers in the same stack — see the [LangChain ecosystem overview](https://docs.langchain.com/oss/python/concepts/products) for how they relate. Use **Deep Agents** when you want the full harness — planning, context management, delegation — out of the box. Use [**LangChain's `create_agent`**](https://docs.langchain.com/oss/python/langchain/agents) when you want a lighter harness without the bundled middleware. Drop to [**LangGraph**](https://docs.langchain.com/oss/python/langgraph/overview) when the agent loop itself isn't the right shape and you need a custom graph.
+## Project Structure
 
-The layers compose: any LangGraph `CompiledStateGraph` can be passed in as a sub-agent to a Deep Agent, so custom orchestration plugs in alongside the harness's defaults.
+```
+├── chat-ui/                      # Web Chat UI
+│   ├── server.py                 # FastAPI backend
+│   ├── start.bat                 # Launch script
+│   ├── AGENTS.md                 # Agent memory file
+│   ├── chat.db                   # SQLite database (auto-created)
+│   ├── skills/                   # Agent skills
+│   │   └── project-analyzer/     # Project analysis skill
+│   └── static/
+│       └── index.html            # Frontend
+├── libs/                         # Deep Agents SDK (unmodified)
+│   ├── deepagents/               # Core SDK
+│   ├── code/                     # dcode terminal agent
+│   └── cli/                      # CLI tools
+├── launch_dcode.py               # dcode Python wrapper
+├── run_agent.py                  # Python SDK interactive mode
+├── run_dcode.bat                 # dcode launcher (CMD)
+└── run_dcode.ps1                 # dcode launcher (PowerShell)
+```
 
----
+## License
 
-## Resources
+This project is based on **Deep Agents** by LangChain, licensed under the [MIT License](LICENSE).
 
-- [Examples](examples/) — working agents and patterns
-- [Documentation](https://docs.langchain.com/oss/python/deepagents/overview) — conceptual overviews and guides
-- [LangChain ecosystem overview](https://docs.langchain.com/oss/python/concepts/products) — how Deep Agents, LangChain, LangGraph, and LangSmith fit together
-- [API reference](https://reference.langchain.com/python/deepagents/) — complete reference for all public classes, functions, and types
-- [Discussions](https://forum.langchain.com/c/oss-product-help-lc-and-lg/deep-agents/18) — community forum for technical questions, ideas, and feedback
-- [LangChain Academy](https://academy.langchain.com/) — Comprehensive, free courses on LangChain libraries and products, made by the LangChain team.
-- [Contributing Guide](https://docs.langchain.com/oss/python/contributing/overview) — how to contribute and find good first issues
-- [Code of Conduct](https://github.com/langchain-ai/langchain/?tab=coc-ov-file) — community guidelines and standards
+The original Deep Agents code is Copyright (c) LangChain, Inc. — see [LICENSE](LICENSE) for details.
 
----
-
-## Acknowledgements
-
-Inspired by Claude Code: an attempt to identify what makes it general-purpose, and push that further.
-
-## Security
-
-Deep Agents follows a "trust the LLM" model. The agent can do anything its tools allow. Enforce boundaries at the tool/sandbox level, not by expecting the model to self-police. See the [security policy](https://github.com/langchain-ai/deepagents?tab=security-ov-file) for more information.
+The Chat UI and additional tooling in this repository are provided under the same MIT license.
