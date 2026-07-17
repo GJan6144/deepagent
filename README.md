@@ -1,5 +1,5 @@
 <div align="center">
-  <img src=".github/images/logo-dark.svg" width="40%" alt="Deep Agents Logo">
+  <img src=".github/images/logo-icon.svg" width="80" height="80" alt="Deep Agents Logo">
 
 # Deep Agents - 本地部署 Chat UI
 
