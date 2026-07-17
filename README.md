@@ -1,124 +1,123 @@
-# Deep Agents - Local Chat UI
-
-<div align="center">
-  <p>A locally deployed <a href="https://github.com/langchain-ai/deepagents">Deep Agents</a> with a web-based Chat UI, powered by DeepSeek v4 Flash.</p>
-</div>
-
 <div align="center">
   <img src=".github/images/logo-dark.svg" width="40%" alt="Deep Agents Logo">
 </div>
 
+# Deep Agents - 本地部署 Chat UI
+
+<div align="center">
+  <p>基于 <a href="https://github.com/langchain-ai/deepagents">Deep Agents</a> 框架的本地部署版 Web 聊天界面，接入 DeepSeek v4 Flash 模型。</p>
+</div>
+
 <br>
 
-## Overview
+## 概述
 
-This project is a local deployment of LangChain's **Deep Agents** framework with a custom web chat interface, similar to DeepSeek Chat or ChatGPT. It provides:
+本项目是 LangChain **Deep Agents** 框架的本地部署版本，附带一个自定义的 Web 聊天界面（类似 DeepSeek Chat 或 ChatGPT）。提供以下能力：
 
-- **Web Chat UI** — browser-based chat interface with session management, streaming responses, and message history
-- **Full Framework Capabilities** — shell execution, filesystem access, sub-agents, skills, memory, and more
-- **DeepSeek Integration** — uses DeepSeek v4 Flash via OpenAI-compatible API
-- **Local Deployment** — runs entirely on your machine, no cloud dependencies
+- **Web 聊天界面** — 浏览器端会话管理、流式输出、消息历史
+- **完整框架能力** — Shell 执行、文件系统访问、子 Agent、技能系统、持久化记忆等
+- **DeepSeek 集成** — 通过 OpenAI 兼容 API 接入 DeepSeek v4 Flash
+- **本地运行** — 完全在本地执行，无云端依赖
 
-## Quick Start
+## 快速开始
 
-### Prerequisites
+### 环境要求
 
 - Python 3.11+
-- [uv](https://docs.astral.sh/uv/) package manager
+- [uv](https://docs.astral.sh/uv/) 包管理器
 
-### Setup
+### 安装依赖
 
 ```bash
-# Install dependencies for each package
+# 安装各包的依赖
 cd libs/deepagents && uv sync --all-groups
 cd ../code && uv sync --all-groups
 cd ../cli && uv sync --all-groups
 cd ../../chat-ui
 ```
 
-### Configure Model
+### 配置模型
 
-Set environment variables before starting:
+启动前设置环境变量：
 
 ```bash
-set OPENAI_API_KEY=your_deepseek_api_key
+set OPENAI_API_KEY=你的deepseek_api_key
 set OPENAI_BASE_URL=https://api.deepseek.com/v1
 ```
 
-### Run
+### 启动
 
 ```bash
-# Option 1: Start Chat UI
-start.bat       # or double-click start.bat
+# 方式一：启动 Web Chat UI
+cd chat-ui
+start.bat                          # 或双击 start.bat
+# 浏览器打开 http://localhost:8765
 
-# Option 2: Python SDK interactive mode
+# 方式二：Python SDK 交互模式
 python run_agent.py
 
-# Option 3: dcode terminal agent
-run_dcode.bat   # or run_dcode.ps1
+# 方式三：dcode 终端编码助手
+run_dcode.bat                      # CMD
+# 或
+run_dcode.ps1                      # PowerShell
 ```
 
-Then open **http://localhost:8765** in your browser.
+## Chat UI 功能
 
-## Chat UI Features
+| 功能 | 说明 |
+|------|------|
+| **会话管理** | 新建、重命名（内联编辑）、删除会话。按今天/7天/30天/月分组 |
+| **会话置顶** | 将重要会话固定在顶部 |
+| **流式输出** | 实时逐字输出，可点击停止按钮中断 |
+| **消息操作** | 每条消息支持复制、重新生成、点赞/点踩 |
+| **思考过程** | 可折叠显示模型的推理过程（取决于模型是否支持） |
+| **跨会话记忆** | Agent 通过读写 AGENTS.md 文件实现跨会话记忆 |
+| **删除确认** | 删除会话时弹出居中确认弹窗，防止误删 |
+| **右键菜单** | 右键或点击 ⋮ 按钮可重命名、置顶/取消置顶、删除 |
 
-| Feature | Description |
-|---------|-------------|
-| **Session Management** | Create, rename, delete conversations. Sessions grouped by Today / 7 days / 30 days / Monthly |
-| **Pin Sessions** | Pin important conversations to the top |
-| **Streaming Responses** | Real-time token streaming with stop button |
-| **Message Actions** | Copy, regenerate, like/dislike feedback per message |
-| **Thinking Display** | Collapsible reasoning/thinking section (model-dependent) |
-| **Cross-session Memory** | AGENTS.md stores user info across conversations |
-| **Inline Rename** | Click to edit conversation titles directly |
-| **Delete Confirmation** | Not-destructive delete with confirmation modal |
+## 已启用的框架能力
 
-## Capabilities
+| 能力 | 状态 |
+|------|------|
+| Shell 执行 (`execute`) | ✅ 已启用 |
+| 文件系统工具 (ls, read, write, edit, glob, grep) | ✅ 已启用 |
+| 框架记忆 (AGENTS.md) | ✅ 已启用 |
+| 技能系统 (Skills) | ✅ 已启用 |
+| 子 Agent (同步) | ✅ 已启用 |
+| 状态检查点 (Checkpointer) | ✅ 已启用 |
+| 自定义工具 | ✅ 已启用 |
+| 自动摘要 | ✅ 已启用 |
+| 工具调用修复 | ✅ 已启用 |
+| 任务清单 (Todo List) | ✅ 已启用 |
+| 人工介入 (Human-in-the-loop) | ⏳ 可选配置 |
+| 异步子 Agent | ⏳ 需要远程服务器 |
+| 评分系统 (Rubric) | ⏳ 可选配置 |
 
-This deployment enables all Deep Agents framework capabilities:
-
-| Capability | Status |
-|------------|--------|
-| Shell Execution (`execute`) | ✅ Enabled |
-| Filesystem Tools (ls, read, write, edit, glob) | ✅ Enabled |
-| Framework Memory (AGENTS.md) | ✅ Enabled |
-| Skills System | ✅ Enabled |
-| Sub-Agents (sync) | ✅ Enabled |
-| Checkpointer | ✅ Enabled |
-| Custom Tools | ✅ Enabled |
-| Auto Summarization | ✅ Enabled |
-| Tool Call Repair | ✅ Enabled |
-| Todo List | ✅ Enabled |
-| Human-in-the-loop | ⏳ Optional |
-| Async Sub-Agents | ⏳ Needs remote server |
-| Rubric Evaluation | ⏳ Optional |
-
-## Project Structure
+## 项目结构
 
 ```
-├── chat-ui/                      # Web Chat UI
-│   ├── server.py                 # FastAPI backend
-│   ├── start.bat                 # Launch script
-│   ├── AGENTS.md                 # Agent memory file
-│   ├── chat.db                   # SQLite database (auto-created)
-│   ├── skills/                   # Agent skills
-│   │   └── project-analyzer/     # Project analysis skill
+├── chat-ui/                          # Web 聊天界面
+│   ├── server.py                     # FastAPI 后端
+│   ├── start.bat                     # 启动脚本
+│   ├── AGENTS.md                     # Agent 记忆文件
+│   ├── chat.db                       # SQLite 数据库（自动创建）
+│   ├── skills/                       # Agent 技能
+│   │   └── project-analyzer/         # 项目分析技能
 │   └── static/
-│       └── index.html            # Frontend
-├── libs/                         # Deep Agents SDK (unmodified)
-│   ├── deepagents/               # Core SDK
-│   ├── code/                     # dcode terminal agent
-│   └── cli/                      # CLI tools
-├── launch_dcode.py               # dcode Python wrapper
-├── run_agent.py                  # Python SDK interactive mode
-├── run_dcode.bat                 # dcode launcher (CMD)
-└── run_dcode.ps1                 # dcode launcher (PowerShell)
+│       └── index.html                # 前端页面
+├── libs/                             # Deep Agents SDK（未修改）
+│   ├── deepagents/                   # 核心 SDK
+│   ├── code/                         # dcode 终端 Agent
+│   └── cli/                          # CLI 工具
+├── launch_dcode.py                   # dcode Python 封装
+├── run_agent.py                      # Python SDK 交互模式
+├── run_dcode.bat                     # dcode 启动脚本 (CMD)
+└── run_dcode.ps1                     # dcode 启动脚本 (PowerShell)
 ```
 
-## License
+## 许可证
 
-This project is based on **Deep Agents** by LangChain, licensed under the [MIT License](LICENSE).
+本项目基于 **Deep Agents** by LangChain，遵循 [MIT 许可协议](LICENSE)。
 
-The original Deep Agents code is Copyright (c) LangChain, Inc. — see [LICENSE](LICENSE) for details.
-
-The Chat UI and additional tooling in this repository are provided under the same MIT license.
+- 原始 Deep Agents 代码版权归 LangChain, Inc. 所有
+- Chat UI 及附加脚本同样遵循 MIT 许可协议
