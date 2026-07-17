@@ -504,7 +504,11 @@ def favicon():
 
 @app.get("/")
 def index():
-    return FileResponse(str(STATIC_DIR / "index.html"))
+    import os
+    content = open(str(STATIC_DIR / "index.html"), encoding="utf-8").read()
+    return Response(content=content, media_type="text/html",
+                    headers={"Cache-Control": "no-cache, no-store, must-revalidate",
+                             "Pragma": "no-cache", "Expires": "0"})
 
 if __name__ == "__main__":
     import uvicorn
