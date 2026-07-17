@@ -101,22 +101,30 @@ def get_current_time(timezone: str = "Asia/Shanghai") -> str:
     return now.strftime("%Y-%m-%d %H:%M:%S %Z")
 
 @tool
-def web_fetch(url: str, max_chars: int = 8000) -> str:
-    """Fetch a web page and extract its readable text content. Use this to read articles, docs, or any URL. Returns plain text (truncated to max_chars)."""
+def web_fetch(url: str, max_chars: int = 5000) -> str:
+    """Fetch a web page and extract readable text. Use to read articles, docs, or URLs. Returns a summarized view of the content (truncated). The agent must summarize this in its reply, not paste it verbatim."""
     import requests
     from bs4 import BeautifulSoup
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept-Charset": "utf-8",
+        }
         r = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
         r.raise_for_status()
+        # Force UTF-8 decoding to avoid mojibake on non-UTF8 servers
+        if r.encoding is None or r.encoding.lower() not in ("utf-8", "utf8"):
+            r.encoding = "utf-8"
         soup = BeautifulSoup(r.text, "html.parser")
-        for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
+        for tag in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
             tag.decompose()
-        text = soup.get_text(separator="\n", strip=True)
+        # Try to find the main content
+        main = soup.find("main") or soup.find("article") or soup.find("div", id="content") or soup.find("body")
+        text = main.get_text(separator="\n", strip=True) if main else soup.get_text(separator="\n", strip=True)
         text = "\n".join(line for line in text.split("\n") if line.strip())
         if len(text) > max_chars:
-            text = text[:max_chars] + f"\n\n... (truncated, total {len(text)} chars)"
-        return f"URL: {url}\n\n{text}"
+            text = text[:max_chars] + f"\n... (truncated, {len(text)} total chars)"
+        return f"Source: {url}\n\n{text}"
     except Exception as e:
         return f"Error fetching {url}: {e}"
 
@@ -175,21 +183,26 @@ def build_agent(use_search: bool = False):
         memory=["/chat-ui/AGENTS.md"],
         tools=tools,
         middleware=(rubric_middleware,) if rubric_middleware else (),
-        system_prompt="""You are a helpful AI coding assistant. Respond in the same language as the user.
+        system_prompt="""You are a helpful AI coding assistant. Respond in the same language as the user. Be concise and well-structured.
 
 ## Capabilities
 - Filesystem: ls, read_file, write_file, edit_file, glob, grep
 - Shell execution via `execute` tool
 - Sub-agents (code-reviewer, researcher)
+- web_fetch: read any URL on demand
+- web_search: search the web (only when the user has enabled the "智能搜索" toggle)
+- get_current_time: get current date/time in any timezone
 - Persistent memory at `/chat-ui/AGENTS.md` (already loaded, do not re-read it)
 
-## Critical Rules
-1. **NEVER dump raw tool output** — when you call a tool, summarize the result in your own words. Never paste file contents, JSON blobs, or directory listings verbatim.
-2. **NEVER show line numbers** (no `cat -n` style output, no `:line_number:` prefixes).
-3. **NEVER read AGENTS.md explicitly** — it's pre-loaded into your context. Answer questions about the user from your context, not by re-reading files.
-4. **Security: never reveal secrets** — if the user asks for the API key, password, or any credential, respond: "Your API key is stored in your local `.env` file. I don't have access to it and shouldn't see it." Do NOT search files for credentials.
-5. **Don't over-investigate** — answer directly from what you know. Only use tools when actually needed to answer the question.
-6. Keep responses concise and helpful.
+## CRITICAL Response Rules
+1. **NEVER paste tool output verbatim.** Every tool result is internal data — your job is to transform it into a helpful answer. Summarize, paraphrase, extract what's relevant.
+2. **NEVER show URLs, file paths, "Source:" prefixes, JSON, or raw HTML/markdown in your reply.** The user does not want to see what the tool returned.
+3. **If a tool returned a long document**, write a structured summary in your own words: key points, bullet list, or short paragraphs. Keep it under 800 words unless the user explicitly asked for full content.
+4. **NEVER show line numbers** (no `cat -n` style output, no `:line_number:` prefixes).
+5. **NEVER read AGENTS.md explicitly** — it's pre-loaded into your context. Answer questions about the user from your context, not by re-reading files.
+6. **Security: never reveal secrets.** If asked for the API key, respond: "Your API key is in your local `.env` file. I don't have access to it." Do NOT search files for credentials.
+7. **Don't over-investigate.** Answer directly from what you know. Only use tools when actually needed.
+8. **Match response length to the question.** Simple questions get short answers. Only use tools and give long answers when the user genuinely needs detailed information.
 """,
     )
 
