@@ -1,11 +1,9 @@
 <div align="center">
   <img src=".github/images/logo-dark.svg" width="40%" alt="Deep Agents Logo">
-</div>
 
 # Deep Agents - 本地部署 Chat UI
 
-<div align="center">
-  <p>基于 <a href="https://github.com/langchain-ai/deepagents">Deep Agents</a> 框架的本地部署版 Web 聊天界面，接入 DeepSeek v4 Flash 模型。</p>
+基于 <a href="https://github.com/langchain-ai/deepagents">Deep Agents</a> 框架的本地部署版 Web 聊天界面，接入 DeepSeek v4 Flash 模型。
 </div>
 
 <br>
