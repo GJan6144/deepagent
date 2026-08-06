@@ -67,7 +67,7 @@ checkpointer = InMemorySaver()
 # --- Backend: LocalShellBackend (enables execute + filesystem) ---
 backend = LocalShellBackend(
     root_dir=str(PROJECT_DIR),
-    virtual_mode=False,  # allow real Windows paths
+    virtual_mode=True,  # map /path to PROJECT_DIR/path (needed for AGENTS.md memory)
     timeout=120,
     max_output_bytes=200_000,
 )
