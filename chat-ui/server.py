@@ -30,8 +30,28 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, FileResponse, Response
 from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, AIMessageChunk
 from langgraph.checkpoint.memory import InMemorySaver
+
+
+class DeepSeekChatOpenAI(ChatOpenAI):
+    """ChatOpenAI subclass that preserves DeepSeek's `reasoning_content` (thinking)
+    from the raw stream delta into `additional_kwargs`, so the UI can display
+    the model's chain-of-thought in real time. Standard langchain-openai drops it."""
+
+    def _convert_chunk_to_generation_chunk(self, chunk, default_chunk_class, base_generation_info=None):
+        gen = super()._convert_chunk_to_generation_chunk(chunk, default_chunk_class, base_generation_info)
+        if gen is None:
+            return None
+        if isinstance(gen.message, AIMessageChunk):
+            choices = chunk.get("choices", []) or chunk.get("chunk", {}).get("choices", [])
+            if choices:
+                delta = choices[0].get("delta") or {}
+                rc = delta.get("reasoning_content")
+                if rc:
+                    prev = gen.message.additional_kwargs.get("reasoning_content", "")
+                    gen.message.additional_kwargs["reasoning_content"] = prev + rc
+        return gen
 
 from deepagents import (
     create_deep_agent,
@@ -51,6 +71,17 @@ STATIC_DIR = CHAT_UI_DIR / "static"
 SKILLS_DIR = CHAT_UI_DIR / "skills"
 
 MODEL_NAME = "deepseek-v4-flash"
+
+# DeepSeek chat model instance that preserves reasoning_content (thinking)
+# so the UI can stream the chain-of-thought. Reuse one instance across agents.
+_deepseek_model = DeepSeekChatOpenAI(
+    model=MODEL_NAME,
+    base_url=os.environ.get("OPENAI_BASE_URL", "https://api.deepseek.com/v1"),
+    api_key=os.environ.get("OPENAI_API_KEY"),
+    temperature=0,
+    streaming=True,
+    use_responses_api=False,
+)
 
 # Register DeepSeek provider profile
 register_provider_profile(
@@ -174,7 +205,7 @@ def build_agent(use_search: bool = False):
     """Build the agent with optional search tool. Rebuilt per request so the toolset reflects the user's current toggle."""
     tools = base_tools + (search_tool if use_search else [])
     return create_deep_agent(
-        model="openai:deepseek-v4-flash",
+        model=_deepseek_model,
         backend=backend,
         permissions=permissions,
         checkpointer=checkpointer,
