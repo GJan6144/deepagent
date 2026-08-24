@@ -110,8 +110,28 @@
         .bubble ul, .bubble ol { padding-left: 20px; margin-bottom: 8px; }
         .bubble li { margin-bottom: 4px; }
 
-        .tool-indicator { max-width: 800px; margin: -12px auto 20px; padding: 0 24px 0 70px; }
-        .tool-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--bg-tool); color: var(--text-tool); padding: 6px 12px; border-radius: 8px; font-size: 12px; }
+        .tools-list { max-width: 800px; margin: 0 auto 12px; padding: 0 24px 0 70px; }
+        .tool-item { border: 0.5px solid var(--border); border-radius: 8px; margin-bottom: 6px; overflow: hidden; background: var(--bg-input); }
+        .tool-item-header { display: flex; align-items: center; gap: 8px; padding: 7px 12px; cursor: pointer; user-select: none; font-size: 12px; }
+        .tool-item-header:hover { background: var(--bg-hover); }
+        .tool-status { width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .tool-status.running { color: var(--accent); }
+        .tool-status.success { color: #2e9e5b; }
+        .tool-status.error { color: #e44; }
+        .tool-name { font-weight: 600; color: var(--text-primary); }
+        .tool-state-label { margin-left: auto; font-size: 11px; }
+        .tool-state-label.running { color: var(--accent); }
+        .tool-state-label.success { color: #2e9e5b; }
+        .tool-state-label.error { color: #e44; }
+        .tool-toggle { transition: transform 0.2s; color: var(--text-secondary); font-size: 10px; }
+        .tool-item.open .tool-toggle { transform: rotate(180deg); }
+        .tool-detail { display: none; padding: 8px 12px; border-top: 0.5px solid var(--border); font-size: 12px; line-height: 1.6; color: var(--text-secondary); }
+        .tool-item.open .tool-detail { display: block; }
+        .tool-detail-label { color: var(--text-muted); font-weight: 600; margin-top: 6px; }
+        .tool-detail-label:first-child { margin-top: 0; }
+        .tool-detail-code { background: rgba(0,0,0,0.05); border-radius: 4px; padding: 4px 8px; margin-top: 3px; white-space: pre-wrap; word-break: break-all; font-family: 'Fira Code', monospace; font-size: 11px; }
+        .tool-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--accent); border-top-color: transparent; border-radius: 50%; animation: toolspin 0.8s linear infinite; }
+        @keyframes toolspin { to { transform: rotate(360deg); } }
 
         .typing-indicator { display: inline-flex; gap: 4px; align-items: center; padding: 4px 0; }
         .typing-indicator span { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: bounce 1.4s infinite; }
@@ -580,7 +600,9 @@
 
             isStreaming = true;
             setButtonMode('stop');
-            let toolIndicator = null;
+            let toolsList = null;
+            const toolItems = {};
+            let toolSeq = 0;
             let thinkingBlock = null;
             let thinkingContent = null;
             abortController = new AbortController();
@@ -627,16 +649,53 @@
                             }
                             if (data.error) { bubble.innerHTML = '<span style="color:#e44">Error: ' + escapeHtml(data.error) + '</span>'; }
                             if (data.status === 'tool_start') {
-                                if (!toolIndicator) {
-                                    toolIndicator = document.createElement('div');
-                                    toolIndicator.className = 'tool-indicator';
-                                    aiRow.parentNode.insertBefore(toolIndicator, aiRow.nextSibling);
+                                if (!toolsList) {
+                                    toolsList = document.createElement('div');
+                                    toolsList.className = 'tools-list';
+                                    aiRow.parentNode.insertBefore(toolsList, aiRow);
                                 }
-                                toolIndicator.innerHTML = '<span class="tool-badge">&#9881; Using ' + escapeHtml(data.name || 'tool') + '...</span>';
+                                const key = 'tool_' + (toolSeq++);
+                                const item = document.createElement('div');
+                                item.className = 'tool-item';
+                                item.dataset.state = 'running';
+                                item.innerHTML = `
+                                    <div class="tool-item-header" onclick="this.parentElement.classList.toggle('open')" title="点击展开详情">
+                                        <span class="tool-status running"><span class="tool-spinner"></span></span>
+                                        <span class="tool-name">${escapeHtml(data.name || 'tool')}</span>
+                                        <span class="tool-state-label running">执行中...</span>
+                                        <span class="tool-toggle">&#9662;</span>
+                                    </div>
+                                    <div class="tool-detail">
+                                        <div class="tool-detail-label">参数</div>
+                                        <div class="tool-detail-code">${escapeHtml(data.args || '(无)')}</div>
+                                    </div>`;
+                                toolsList.appendChild(item);
+                                toolItems[key] = { item: item, name: data.name || 'tool' };
+                                scrollToBottom();
                             }
-                            if (data.status === 'tool_end' && toolIndicator) {
-                                toolIndicator.remove();
-                                toolIndicator = null;
+                            if (data.status === 'tool_end') {
+                                // Find the last running item with the matching tool name
+                                let target = null;
+                                for (const k in toolItems) {
+                                    if (toolItems[k].name === (data.name || 'tool') && toolItems[k].item.dataset.state === 'running') target = toolItems[k];
+                                }
+                                if (target) {
+                                    const ok = (data.tool_status || 'success') === 'success';
+                                    target.item.dataset.state = ok ? 'success' : 'error';
+                                    const st = target.item.querySelector('.tool-status');
+                                    st.className = 'tool-status ' + (ok ? 'success' : 'error');
+                                    st.innerHTML = ok
+                                        ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#2e9e5b" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>'
+                                        : '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#e44" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+                                    const lbl = target.item.querySelector('.tool-state-label');
+                                    lbl.textContent = ok ? '成功' : '失败';
+                                    lbl.className = 'tool-state-label ' + (ok ? 'success' : 'error');
+                                    const detail = target.item.querySelector('.tool-detail');
+                                    const resDiv = document.createElement('div');
+                                    resDiv.innerHTML = `<div class="tool-detail-label">结果</div><div class="tool-detail-code">${escapeHtml(data.result || '(无)')}</div>`;
+                                    detail.appendChild(resDiv);
+                                    scrollToBottom();
+                                }
                             }
                             if (data.done && data.message_id) {
                                 // Update like/dislike buttons with real message id

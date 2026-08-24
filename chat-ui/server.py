@@ -30,7 +30,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, FileResponse, Response
 from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, AIMessageChunk
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, AIMessageChunk, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 
@@ -496,6 +496,28 @@ async def chat(req: SendMessageRequest):
                             new_thinking = reasoning[len(full_thinking):]
                             full_thinking = reasoning
                             yield f"data: {json.dumps({'thinking': new_thinking})}\n\n"
+                    # Tool call started (AIMessage with tool_calls)
+                    if hasattr(last, "tool_calls") and getattr(last, "tool_calls", None):
+                        for tc in last.tool_calls:
+                            tc_name = tc.get("name", "tool")
+                            tc_args = tc.get("args", {})
+                            if isinstance(tc_args, str):
+                                try:
+                                    tc_args = json.loads(tc_args)
+                                except Exception:
+                                    pass
+                            args_preview = ""
+                            if tc_args:
+                                try:
+                                    args_preview = json.dumps(tc_args, ensure_ascii=False)[:200]
+                                except Exception:
+                                    args_preview = str(tc_args)[:200]
+                            yield f"data: {json.dumps({'status': 'tool_start', 'name': tc_name, 'args': args_preview})}\n\n"
+                    # Tool call finished (ToolMessage)
+                    if isinstance(last, ToolMessage):
+                        t_status = getattr(last, "status", "success") or "success"
+                        t_result = str(last.content or "")[:300]
+                        yield f"data: {json.dumps({'status': 'tool_end', 'name': getattr(last, 'name', 'tool'), 'tool_status': t_status, 'result': t_result})}\n\n"
 
             # Save AI response
             ai_msg_id = str(uuid.uuid4())
