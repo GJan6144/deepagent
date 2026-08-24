@@ -257,5 +257,6 @@ node_modules/
 libs/code/deepagents_code/_build_info.py
 chat.db
 chat-ui/chat.db
+chat-ui/agent_state.db
 chat-ui/AGENTS.md
 large_tool_results/

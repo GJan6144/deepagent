@@ -31,7 +31,8 @@ from fastapi.responses import StreamingResponse, FileResponse, Response
 from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, AIMessageChunk, ToolMessage
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.store.sqlite import SqliteStore
 
 
 class DeepSeekChatOpenAI(ChatOpenAI):
@@ -92,8 +93,11 @@ register_provider_profile(
     }),
 )
 
-# --- Checkpointer ---
-checkpointer = InMemorySaver()
+# --- Checkpointer & Store (SQLite persistent, survive restarts) ---
+# chat.db is used by the chat UI itself; agent graph state goes to a separate file.
+AGENT_STATE_DB = CHAT_UI_DIR / "agent_state.db"
+checkpointer = None
+store = None
 
 # --- Backend: LocalShellBackend (enables execute + filesystem) ---
 backend = LocalShellBackend(
@@ -208,7 +212,41 @@ def crm_leads_read(limit: int = 20, offset: int = 0, source: str = "") -> str:
     except Exception as e:
         return f"CRM 线索读取失败: {e}"
 
-base_tools = [get_project_info, get_current_time, web_fetch, crm_leads_read]
+@tool
+def store_memory(key: str, value: str) -> str:
+    """保存一条长期记忆，跨会话持久保留（重启服务后依然存在）。key 是记忆的标识（如 'user_name'、'user_favorite_color'），value 是记忆内容。适合记住用户偏好、个人资料、重要约定等。"""
+    global store
+    if store is None:
+        return "记忆库未初始化（store 未就绪）"
+    try:
+        store.put(("memories",), key, {"value": value})
+        return f"已保存记忆: {key} = {value}"
+    except Exception as e:
+        return f"保存记忆失败: {e}"
+
+@tool
+def recall_memory(key: str = "") -> str:
+    """读取长期记忆。key 为空时返回全部记忆条目；指定 key 时返回该条记忆。记忆由 store_memory 写入，跨会话持久。"""
+    global store
+    if store is None:
+        return "记忆库未初始化（store 未就绪）"
+    try:
+        if key:
+            item = store.get(("memories",), key)
+            if item:
+                return f"{key}: {item.value.get('value', '')}"
+            return f"未找到记忆: {key}"
+        items = store.search(("memories",), limit=50)
+        if not items:
+            return "暂无已保存的记忆。"
+        lines = ["已保存的长期记忆:"]
+        for it in items:
+            lines.append(f"- {it.key}: {it.value.get('value', '')}")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"读取记忆失败: {e}"
+
+base_tools = [get_project_info, get_current_time, web_fetch, crm_leads_read, store_memory, recall_memory]
 search_tool = [web_search]
 
 # --- Subagents ---
@@ -242,6 +280,7 @@ SYSTEM_PROMPT = """You are a helpful AI coding assistant. Respond in the same la
 - web_search: search the web (only when the user has enabled the "智能搜索" toggle)
 - get_current_time: get current date/time in any timezone
 - crm_leads_read: read CRM sales leads via API
+- store_memory / recall_memory: persistent long-term memory (survives restarts, stored in SQLite)
 - Persistent memory at `/chat-ui/AGENTS.md` (already loaded, do not re-read it)
 
 ## CRITICAL Response Rules
@@ -265,6 +304,7 @@ def build_agent(use_search: bool = False):
         backend=backend,
         permissions=permissions,
         checkpointer=checkpointer,
+        store=store,
         subagents=subagents,
         skills=skills,
         memory=["/chat-ui/AGENTS.md"],
@@ -342,7 +382,16 @@ class FeedbackRequest(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    yield
+    global checkpointer, store
+    # Persistent store (semantic/long-term memory) backed by SQLite
+    import sqlite3
+    _conn = sqlite3.connect(str(AGENT_STATE_DB), check_same_thread=False, isolation_level=None)
+    store = SqliteStore(_conn)
+    # Persistent async checkpointer (agent graph state survives restarts)
+    async with AsyncSqliteSaver.from_conn_string(str(AGENT_STATE_DB)) as ckpt:
+        checkpointer = ckpt
+        yield
+    _conn.close()
 
 app = FastAPI(lifespan=lifespan)
 
