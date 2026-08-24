@@ -226,6 +226,31 @@ skills = [str(SKILLS_DIR)]
 rubric_middleware = None
 
 # --- Agent Factory ---
+SYSTEM_PROMPT = """You are a helpful AI coding assistant. Respond in the same language as the user. Be concise and well-structured.
+
+## Capabilities
+- Filesystem: ls, read_file, write_file, edit_file, glob, grep
+- Shell execution via `execute` tool
+- Sub-agents (code-reviewer, researcher)
+- web_fetch: read any URL on demand
+- web_search: search the web (only when the user has enabled the "智能搜索" toggle)
+- get_current_time: get current date/time in any timezone
+- crm_leads_read: read CRM sales leads via API
+- Persistent memory at `/chat-ui/AGENTS.md` (already loaded, do not re-read it)
+
+## CRITICAL Response Rules
+1. **NEVER paste tool output verbatim.** Every tool result is internal data — your job is to transform it into a helpful answer. Summarize, paraphrase, extract what's relevant.
+2. **NEVER show URLs, file paths, "Source:" prefixes, JSON, or raw HTML/markdown in your reply.** The user does not want to see what the tool returned.
+3. **If a tool returned a long document**, write a structured summary in your own words: key points, bullet list, or short paragraphs. Keep it under 800 words unless the user explicitly asked for full content.
+4. **NEVER show line numbers** (no `cat -n` style output, no `:line_number:` prefixes).
+5. **NEVER read AGENTS.md explicitly** — it's pre-loaded into your context. Answer questions about the user from your context, not by re-reading files.
+6. **Security: never reveal secrets.** If asked for the API key, respond: "Your API key is in your local `.env` file. I don't have access to it." Do NOT search files for credentials.
+7. **Don't over-investigate.** Answer directly from what you know. Only use tools when actually needed.
+8. **Match response length to the question.** Simple questions get short answers. Only use tools and give long answers when the user genuinely needs detailed information.
+9. **IMPORTANT: Use virtual paths for filesystem tools.** When using `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep` etc., ALWAYS use forward-slash paths starting with `/` (e.g., `/chat-ui/server.py`, `/chat-ui/static/index.html`, `/libs/deepagents/`). NEVER use Windows absolute paths like `C:\\...` or `C:/...`. The project root is mapped to `/`.
+"""
+
+
 def build_agent(use_search: bool = False):
     """Build the agent with optional search tool. Rebuilt per request so the toolset reflects the user's current toggle."""
     tools = base_tools + (search_tool if use_search else [])
@@ -239,28 +264,7 @@ def build_agent(use_search: bool = False):
         memory=["/chat-ui/AGENTS.md"],
         tools=tools,
         middleware=(rubric_middleware,) if rubric_middleware else (),
-        system_prompt="""You are a helpful AI coding assistant. Respond in the same language as the user. Be concise and well-structured.
-
-## Capabilities
-- Filesystem: ls, read_file, write_file, edit_file, glob, grep
-- Shell execution via `execute` tool
-- Sub-agents (code-reviewer, researcher)
-- web_fetch: read any URL on demand
-- web_search: search the web (only when the user has enabled the "智能搜索" toggle)
-- get_current_time: get current date/time in any timezone
-- Persistent memory at `/chat-ui/AGENTS.md` (already loaded, do not re-read it)
-
-## CRITICAL Response Rules
-1. **NEVER paste tool output verbatim.** Every tool result is internal data — your job is to transform it into a helpful answer. Summarize, paraphrase, extract what's relevant.
-2. **NEVER show URLs, file paths, "Source:" prefixes, JSON, or raw HTML/markdown in your reply.** The user does not want to see what the tool returned.
-3. **If a tool returned a long document**, write a structured summary in your own words: key points, bullet list, or short paragraphs. Keep it under 800 words unless the user explicitly asked for full content.
-4. **NEVER show line numbers** (no `cat -n` style output, no `:line_number:` prefixes).
-5. **NEVER read AGENTS.md explicitly** — it's pre-loaded into your context. Answer questions about the user from your context, not by re-reading files.
-6. **Security: never reveal secrets.** If asked for the API key, respond: "Your API key is in your local `.env` file. I don't have access to it." Do NOT search files for credentials.
-7. **Don't over-investigate.** Answer directly from what you know. Only use tools when actually needed.
-8. **Match response length to the question.** Simple questions get short answers. Only use tools and give long answers when the user genuinely needs detailed information.
-9. **IMPORTANT: Use virtual paths for filesystem tools.** When using `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep` etc., ALWAYS use forward-slash paths starting with `/` (e.g., `/chat-ui/server.py`, `/chat-ui/static/index.html`, `/libs/deepagents/`). NEVER use Windows absolute paths like `C:\...` or `C:/...`. The project root is mapped to `/`.
-""",
+        system_prompt=SYSTEM_PROMPT,
     )
 
 # --- Database ---
@@ -447,6 +451,70 @@ def get_capabilities():
         "todo_list": True,
     }
 
+
+@app.get("/api/context/{session_id}")
+def get_context(session_id: str):
+    """Return the current session context: system prompt, conversation history,
+    tool definitions, and skill index. Used by the right-side Context panel."""
+    db = get_db()
+    # Conversation history
+    rows = db.execute(
+        "SELECT role, content, created_at FROM messages WHERE session_id = ? ORDER BY created_at ASC",
+        (session_id,),
+    ).fetchall()
+    db.close()
+    messages = []
+    for r in rows:
+        messages.append({
+            "role": r[0],
+            "content": r[1],
+            "created_at": r[2],
+        })
+    # Tool definitions (from base_tools + search_tool)
+    def _tool_meta(t):
+        fn = getattr(t, "func", t)
+        name = getattr(t, "name", getattr(fn, "__name__", "tool"))
+        desc = (fn.__doc__ or "").strip().split("\n")[0] if fn.__doc__ else ""
+        return {"name": name, "description": desc}
+    tool_defs = [_tool_meta(t) for t in (base_tools + search_tool)]
+    # Built-in filesystem/shell tools provided by the backend (informational)
+    backend_tools = ["ls", "ls_info", "read", "write", "edit", "delete", "glob", "glob_info", "grep", "grep_raw", "execute"]
+    # Skill index: scan SKILLS_DIR subdirectories
+    skill_index = []
+    if SKILLS_DIR.exists():
+        for child in sorted(SKILLS_DIR.iterdir()):
+            if not child.is_dir():
+                continue
+            skill_md = child / "SKILL.md"
+            summary = ""
+            if skill_md.exists():
+                try:
+                    head = skill_md.read_text(encoding="utf-8").split("---")
+                    # Try frontmatter summary
+                    if len(head) >= 3:
+                        for line in head[1].splitlines():
+                            if line.strip().startswith("summary:"):
+                                summary = line.split("summary:", 1)[1].strip().strip("\"'")
+                                break
+                    if not summary:
+                        # First non-empty, non-heading line
+                        for line in skill_md.read_text(encoding="utf-8").splitlines():
+                            s = line.strip().lstrip("#").strip()
+                            if s and not s.startswith("---"):
+                                summary = s
+                                break
+                except Exception:
+                    summary = ""
+            skill_index.append({"name": child.name, "path": str(child), "summary": summary})
+    return {
+        "system_prompt": SYSTEM_PROMPT,
+        "messages": messages,
+        "tools": tool_defs,
+        "backend_tools": backend_tools,
+        "skills": skill_index,
+        "subagents": [{"name": getattr(s, "name", None) or s.get("name", ""), "description": getattr(s, "description", None) or s.get("description", "")} for s in subagents],
+    }
+
 # --- Chat API ---
 @app.post("/api/chat")
 async def chat(req: SendMessageRequest):
@@ -493,6 +561,12 @@ async def chat(req: SendMessageRequest):
         full_response = ""
         full_thinking = ""
         ai_msg_id = None
+
+        def _emit(payload):
+            """Wrap a payload as an SSE data line with a timestamp."""
+            payload["ts"] = datetime.now().isoformat()
+            return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
         try:
             # Use astream for per-node output (chunks are dicts of node->output)
             async for chunk in agent.astream(
@@ -513,14 +587,14 @@ async def chat(req: SendMessageRequest):
                         if len(text) > len(full_response):
                             new_text = text[len(full_response):]
                             full_response = text
-                            yield f"data: {json.dumps({'token': new_text})}\n\n"
+                            yield _emit({"event": "llm_token", "token": new_text, "node": node_name})
                     # Capture reasoning_content (DeepSeek R1 thinking)
                     if hasattr(last, "additional_kwargs"):
                         reasoning = last.additional_kwargs.get("reasoning_content", "")
                         if reasoning and len(reasoning) > len(full_thinking):
                             new_thinking = reasoning[len(full_thinking):]
                             full_thinking = reasoning
-                            yield f"data: {json.dumps({'thinking': new_thinking})}\n\n"
+                            yield _emit({"event": "llm_thinking", "thinking": new_thinking, "node": node_name})
                     # Tool call started (AIMessage with tool_calls)
                     if hasattr(last, "tool_calls") and getattr(last, "tool_calls", None):
                         for tc in last.tool_calls:
@@ -537,12 +611,12 @@ async def chat(req: SendMessageRequest):
                                     args_preview = json.dumps(tc_args, ensure_ascii=False)[:200]
                                 except Exception:
                                     args_preview = str(tc_args)[:200]
-                            yield f"data: {json.dumps({'status': 'tool_start', 'name': tc_name, 'args': args_preview})}\n\n"
+                            yield _emit({"event": "tool_start", "status": "tool_start", "name": tc_name, "args": args_preview, "node": node_name})
                     # Tool call finished (ToolMessage)
                     if isinstance(last, ToolMessage):
                         t_status = getattr(last, "status", "success") or "success"
                         t_result = str(last.content or "")[:300]
-                        yield f"data: {json.dumps({'status': 'tool_end', 'name': getattr(last, 'name', 'tool'), 'tool_status': t_status, 'result': t_result})}\n\n"
+                        yield _emit({"event": "tool_end", "status": "tool_end", "name": getattr(last, "name", "tool"), "tool_status": t_status, "result": t_result, "node": node_name})
 
             # Save AI response
             ai_msg_id = str(uuid.uuid4())
@@ -559,13 +633,13 @@ async def chat(req: SendMessageRequest):
             db.commit()
             db.close()
 
-            yield f"data: {json.dumps({'done': True, 'message_id': ai_msg_id})}\n\n"
+            yield _emit({"event": "done", "done": True, "message_id": ai_msg_id})
 
         except Exception as e:
             import traceback
             error_detail = traceback.format_exc()
             print(f"[Agent error] {error_detail}")
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            yield _emit({"event": "error", "error": str(e)})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

@@ -89,6 +89,60 @@
         .menu-toggle:hover { background: var(--bg-hover); color: var(--text-primary); }
         .menu-toggle svg { width: 18px; height: 18px; }
 
+        /* Right-side Context Panel */
+        .context-panel { width: 360px; min-width: 360px; background: var(--bg-sidebar); border-left: 1px solid var(--border); display: flex; flex-direction: column; transition: margin-right 0.3s ease, width 0.3s ease, min-width 0.3s ease; overflow: hidden; }
+        .context-panel.collapsed { margin-right: -360px; width: 0; min-width: 0; border-left: none; }
+        .context-panel-header { padding: 12px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; min-height: 56px; }
+        .context-tabs { display: flex; gap: 4px; flex: 1; }
+        .context-tab { background: none; border: 0.5px solid transparent; border-radius: 8px; padding: 5px 10px; font-size: 13px; color: var(--text-secondary); cursor: pointer; font-family: inherit; transition: all 0.15s; }
+        .context-tab:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .context-tab.active { background: var(--bg-input); color: var(--accent); border-color: var(--border); font-weight: 600; }
+        .context-close-btn { background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 4px; border-radius: 6px; display: flex; align-items: center; }
+        .context-close-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .context-close-btn svg { width: 16px; height: 16px; }
+        .context-body { flex: 1; overflow-y: auto; padding: 8px; }
+        .context-body::-webkit-scrollbar { width: 6px; }
+        .context-body::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
+        .context-section { margin-bottom: 10px; border: 0.5px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--bg-input); }
+        .context-section-header { display: flex; align-items: center; gap: 6px; padding: 8px 10px; cursor: pointer; user-select: none; font-size: 12px; font-weight: 600; color: var(--text-primary); }
+        .context-section-header:hover { background: var(--bg-hover); }
+        .context-section-count { margin-left: auto; font-size: 11px; color: var(--text-secondary); font-weight: 400; }
+        .context-section-toggle { color: var(--text-secondary); transition: transform 0.2s; font-size: 10px; }
+        .context-section.open .context-section-toggle { transform: rotate(180deg); }
+        .context-section-content { display: none; padding: 8px 10px; border-top: 0.5px solid var(--border); font-size: 12px; line-height: 1.6; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; max-height: 400px; overflow-y: auto; }
+        .context-section.open .context-section-content { display: block; }
+        .context-code { background: rgba(0,0,0,0.05); border-radius: 4px; padding: 6px 8px; font-family: 'Fira Code', monospace; font-size: 11px; white-space: pre-wrap; word-break: break-word; }
+        .context-msg { padding: 5px 8px; margin-bottom: 4px; border-radius: 6px; font-size: 12px; }
+        .context-msg-role { font-weight: 600; font-size: 11px; margin-bottom: 2px; }
+        .context-msg.role-user { background: rgba(0,0,0,0.03); border-left: 2px solid #4d6bfe; }
+        .context-msg.role-assistant { background: rgba(0,0,0,0.03); border-left: 2px solid #2e9e5b; }
+        .context-msg.role-thinking { background: rgba(0,0,0,0.02); border-left: 2px solid #a070d0; font-style: italic; }
+        .context-tool-item { padding: 5px 0; border-bottom: 0.5px solid var(--border); }
+        .context-tool-item:last-child { border-bottom: none; }
+        .context-tool-name { font-weight: 600; color: var(--text-primary); font-size: 12px; }
+        .context-tool-desc { color: var(--text-secondary); font-size: 11px; margin-top: 2px; }
+        .context-empty { padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px; }
+        /* Timeline */
+        .timeline-item { display: flex; gap: 8px; padding: 8px 10px; border-bottom: 0.5px solid var(--border); font-size: 12px; cursor: pointer; }
+        .timeline-item:hover { background: var(--bg-hover); }
+        .timeline-time { color: var(--text-secondary); font-size: 10px; font-family: 'Fira Code', monospace; flex-shrink: 0; width: 64px; }
+        .timeline-icon { width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .timeline-icon.llm_token { color: #4d6bfe; }
+        .timeline-icon.llm_thinking { color: #a070d0; }
+        .timeline-icon.tool_start { color: var(--accent); }
+        .timeline-icon.tool_end { color: #2e9e5b; }
+        .timeline-icon.done { color: #2e9e5b; }
+        .timeline-icon.error { color: #e44; }
+        .timeline-content { flex: 1; min-width: 0; }
+        .timeline-label { font-weight: 600; color: var(--text-primary); }
+        .timeline-detail { color: var(--text-secondary); font-size: 11px; margin-top: 3px; display: none; white-space: pre-wrap; word-break: break-word; background: rgba(0,0,0,0.04); border-radius: 4px; padding: 5px 7px; }
+        .timeline-item.open .timeline-detail { display: block; }
+        .timeline-toggle { color: var(--text-secondary); font-size: 10px; flex-shrink: 0; transition: transform 0.2s; }
+        .timeline-item.open .timeline-toggle { transform: rotate(180deg); }
+        .context-open-btn { position: fixed; right: 16px; top: 70px; width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: white; border: none; cursor: pointer; display: none; align-items: center; justify-content: center; z-index: 50; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+        .context-open-btn.visible { display: flex; }
+        .context-open-btn svg { width: 18px; height: 18px; }
+
         .messages-container { flex: 1; overflow-y: auto; padding: 24px 0; }
         .messages-container::-webkit-scrollbar { width: 6px; }
         .messages-container::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
@@ -284,14 +338,211 @@
         </div>
     </main>
 
+    <aside class="context-panel" id="contextPanel">
+        <div class="context-panel-header">
+            <div class="context-tabs">
+                <button class="context-tab active" id="ctxTabContext" onclick="switchContextTab('context')">Context</button>
+                <button class="context-tab" id="ctxTabTimeline" onclick="switchContextTab('timeline')">时间线</button>
+            </div>
+            <button class="context-close-btn" onclick="toggleContextPanel()" title="收起面板">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+        </div>
+        <div class="context-body" id="ctxBody">
+            <div id="ctxContextView">
+                <div class="context-empty">选择一个会话后加载 Context</div>
+            </div>
+            <div id="ctxTimelineView" style="display:none">
+                <div class="context-empty">发送消息后，请求时间线会显示在这里</div>
+            </div>
+        </div>
+    </aside>
+
+    <button class="context-open-btn" id="ctxOpenBtn" onclick="toggleContextPanel()" title="展开 Context 面板">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+
     <script>
         let currentSessionId = null;
         let isStreaming = false;
         let abortController = null;
         let currentEmpty = false;  // whether the current session has no messages
         let useSearch = false;     // 联网搜索开关（默认关闭）
+        let ctxTab = 'context';    // 右侧面板当前 Tab: 'context' | 'timeline'
+        let timelineEvents = [];   // 当前会话时间线事件累积
 
         window.onload = function() { showWelcome(); loadSessions(); };
+
+        // --- Context Panel ---
+        function toggleContextPanel() {
+            const panel = document.getElementById('contextPanel');
+            const openBtn = document.getElementById('ctxOpenBtn');
+            panel.classList.toggle('collapsed');
+            const collapsed = panel.classList.contains('collapsed');
+            openBtn.classList.toggle('visible', collapsed);
+        }
+        function switchContextTab(tab) {
+            ctxTab = tab;
+            document.getElementById('ctxTabContext').classList.toggle('active', tab === 'context');
+            document.getElementById('ctxTabTimeline').classList.toggle('active', tab === 'timeline');
+            document.getElementById('ctxContextView').style.display = tab === 'context' ? 'block' : 'none';
+            document.getElementById('ctxTimelineView').style.display = tab === 'timeline' ? 'block' : 'none';
+        }
+        async function loadContext(sessionId) {
+            if (!sessionId) return;
+            const view = document.getElementById('ctxContextView');
+            view.innerHTML = '<div class="context-empty">加载中...</div>';
+            try {
+                const res = await fetch(`/api/context/${sessionId}`);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+                renderContextView(data);
+            } catch (e) {
+                view.innerHTML = '<div class="context-empty">加载失败: ' + escapeHtml(e.message) + '</div>';
+            }
+        }
+        function renderContextView(data) {
+            const view = document.getElementById('ctxContextView');
+            // 系统提示词
+            const sysHtml = section('系统提示词', 1, `<div class="context-code">${escapeHtml(data.system_prompt || '(无)')}</div>`);
+            // 对话历史
+            let msgsHtml = '';
+            if (data.messages && data.messages.length) {
+                data.messages.forEach(m => {
+                    const role = m.role || 'user';
+                    const preview = (m.content || '').slice(0, 500) + ((m.content || '').length > 500 ? '...' : '');
+                    msgsHtml += `<div class="context-msg role-${role}"><div class="context-msg-role">${role}</div><div>${escapeHtml(preview)}</div></div>`;
+                });
+            } else {
+                msgsHtml = '<div style="padding:8px;color:var(--text-secondary)">（暂无对话历史）</div>';
+            }
+            const msgsSection = section('对话历史', data.messages ? data.messages.length : 0, msgsHtml);
+            // 工具定义
+            let toolsHtml = '';
+            const allTools = [...(data.tools || []), ...(data.backend_tools || []).map(t => ({name: t, description: '(内置文件系统/Shell 工具)'}))];
+            allTools.forEach(t => {
+                toolsHtml += `<div class="context-tool-item"><div class="context-tool-name">${escapeHtml(t.name)}</div><div class="context-tool-desc">${escapeHtml(t.description || '')}</div></div>`;
+            });
+            const toolsSection = section('工具定义', allTools.length, toolsHtml);
+            // 技能索引
+            let skillsHtml = '';
+            if (data.skills && data.skills.length) {
+                data.skills.forEach(s => {
+                    skillsHtml += `<div class="context-tool-item"><div class="context-tool-name">${escapeHtml(s.name)}</div><div class="context-tool-desc">${escapeHtml(s.summary || '(无摘要)')}</div></div>`;
+                });
+            } else {
+                skillsHtml = '<div style="padding:8px;color:var(--text-secondary)">（暂无技能）</div>';
+            }
+            const skillsSection = section('技能索引', data.skills ? data.skills.length : 0, skillsHtml);
+            // 子 Agent
+            let subsHtml = '';
+            if (data.subagents && data.subagents.length) {
+                data.subagents.forEach(s => {
+                    subsHtml += `<div class="context-tool-item"><div class="context-tool-name">${escapeHtml(s.name)}</div><div class="context-tool-desc">${escapeHtml(s.description || '')}</div></div>`;
+                });
+            } else {
+                subsHtml = '<div style="padding:8px;color:var(--text-secondary)">（暂无）</div>';
+            }
+            const subsSection = section('子 Agent', data.subagents ? data.subagents.length : 0, subsHtml);
+            view.innerHTML = sysHtml + msgsSection + toolsSection + skillsSection + subsSection;
+        }
+        function section(title, count, innerHtml) {
+            return `<div class="context-section open">
+                <div class="context-section-header" onclick="this.parentElement.classList.toggle('open')">
+                    <span>${escapeHtml(title)}</span>
+                    <span class="context-section-count">${count}</span>
+                    <span class="context-section-toggle">&#9662;</span>
+                </div>
+                <div class="context-section-content">${innerHtml}</div>
+            </div>`;
+        }
+
+        // --- Timeline ---
+        function addTimelineEvent(data) {
+            const ev = data.event || (data.token ? 'llm_token' : data.thinking ? 'llm_thinking' : data.status || 'info');
+            // 合并连续的 llm_token 事件以减少条目数
+            const last = timelineEvents[timelineEvents.length - 1];
+            if (last && last.event === 'llm_token' && ev === 'llm_token') {
+                last.text = (last.text || '') + (data.token || '');
+                last.count = (last.count || 1) + 1;
+                last.endTs = data.ts;
+                renderTimeline();
+                return;
+            }
+            if (last && last.event === 'llm_thinking' && ev === 'llm_thinking') {
+                last.text = (last.text || '') + (data.thinking || '');
+                last.count = (last.count || 1) + 1;
+                last.endTs = data.ts;
+                renderTimeline();
+                return;
+            }
+            const item = { event: ev, ts: data.ts, endTs: data.ts };
+            if (ev === 'llm_token') item.text = data.token || '';
+            else if (ev === 'llm_thinking') item.text = data.thinking || '';
+            else if (ev === 'tool_start') { item.name = data.name; item.args = data.args; }
+            else if (ev === 'tool_end') { item.name = data.name; item.tool_status = data.tool_status; item.result = data.result; }
+            else if (ev === 'done') { item.message_id = data.message_id; }
+            else if (ev === 'error') { item.error = data.error; }
+            if (data.node) item.node = data.node;
+            timelineEvents.push(item);
+            renderTimeline();
+        }
+        function renderTimeline() {
+            const view = document.getElementById('ctxTimelineView');
+            if (!timelineEvents.length) {
+                view.innerHTML = '<div class="context-empty">发送消息后，请求时间线会显示在这里</div>';
+                return;
+            }
+            const icons = {
+                llm_token: '&#9998;',
+                llm_thinking: '&#9881;',
+                tool_start: '&#128295;',
+                tool_end: '&#10003;',
+                done: '&#10003;',
+                error: '&#10007;',
+                info: '&#9679;',
+            };
+            const labels = {
+                llm_token: 'LLM 输出',
+                llm_thinking: 'LLM 思考',
+                tool_start: '工具调用',
+                tool_end: '工具结束',
+                done: '完成',
+                error: '错误',
+                info: '信息',
+            };
+            let html = '';
+            timelineEvents.forEach((e, i) => {
+                const time = (e.ts || '').slice(11, 19);
+                let label = labels[e.event] || e.event;
+                let detail = '';
+                if (e.event === 'llm_token') {
+                    label += ` (${e.count || 1} 段)`;
+                    detail = e.text || '';
+                } else if (e.event === 'llm_thinking') {
+                    label += ` (${e.count || 1} 段)`;
+                    detail = e.text || '';
+                } else if (e.event === 'tool_start') {
+                    label += `: ${e.name || ''}`;
+                    detail = '参数: ' + (e.args || '(无)');
+                } else if (e.event === 'tool_end') {
+                    label += `: ${e.name || ''} [${e.tool_status || 'success'}]`;
+                    detail = '结果: ' + (e.result || '(无)');
+                } else if (e.event === 'error') {
+                    detail = e.error || '';
+                }
+                html += `<div class="timeline-item" onclick="this.classList.toggle('open')">
+                    <span class="timeline-time">${time}</span>
+                    <span class="timeline-icon ${e.event}">${icons[e.event] || icons.info}</span>
+                    <div class="timeline-content">
+                        <div class="timeline-label">${escapeHtml(label)}${e.node ? ' <span style="color:var(--text-secondary);font-weight:400">[' + escapeHtml(e.node) + ']</span>' : ''}</div>
+                        ${detail ? `<div class="timeline-detail">${escapeHtml(detail)}</div>` : ''}
+                    </div>
+                    <span class="timeline-toggle">&#9662;</span>
+                </div>`;
+            });
+            view.innerHTML = html;
+        }
 
         async function loadSessions() {
             const res = await fetch('/api/sessions');
@@ -509,6 +760,9 @@
                 const session = sessions.find(s => s.id === id);
                 document.getElementById('chatTitle').textContent = session ? session.title : 'Chat';
                 container.innerHTML = '';
+                timelineEvents = [];
+                renderTimeline();
+                loadContext(id);
                 if (messages.length === 0) showWelcome();
                 else {
                     messages.forEach(m => {
@@ -629,6 +883,7 @@
                     for (const line of lines) {
                         if (line.startsWith('data: ')) {
                             const data = JSON.parse(line.slice(6));
+                            addTimelineEvent(data);
                             if (data.token) { fullText += data.token; bubble.innerHTML = renderMarkdown(fullText); scrollToBottom(); }
                             if (data.thinking) {
                                 if (!thinkingBlock) {
