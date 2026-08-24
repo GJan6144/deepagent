@@ -579,6 +579,19 @@ async def chat(req: SendMessageRequest):
                     if not isinstance(node_output, dict):
                         continue
                     msgs = node_output.get("messages", [])
+                    # Emit Agent Loop execution info for the Loop tab
+                    loop_msgs = []
+                    for m in msgs:
+                        mtype = type(m).__name__
+                        preview = str(getattr(m, "content", "") or "")[:200]
+                        loop_msgs.append({"type": mtype, "preview": preview})
+                    yield _emit({
+                        "event": "loop",
+                        "node": node_name,
+                        "msg_types": [type(m).__name__ for m in msgs],
+                        "msg_count": len(msgs),
+                        "msgs": loop_msgs,
+                    })
                     if not msgs:
                         continue
                     last = msgs[-1]
