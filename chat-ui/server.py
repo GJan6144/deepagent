@@ -7,6 +7,7 @@ import os
 import sqlite3
 import json
 import uuid
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -33,6 +34,8 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, AIMessageChunk, ToolMessage
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.store.sqlite import SqliteStore
+from langgraph.types import interrupt, Command
+from langchain.agents.middleware.types import AgentMiddleware
 
 
 class DeepSeekChatOpenAI(ChatOpenAI):
@@ -53,6 +56,112 @@ class DeepSeekChatOpenAI(ChatOpenAI):
                     prev = gen.message.additional_kwargs.get("reasoning_content", "")
                     gen.message.additional_kwargs["reasoning_content"] = prev + rc
         return gen
+
+
+class FsApprovalMiddleware(AgentMiddleware):
+    """Filesystem safety & approval middleware.
+
+    Rules (enforced after the model proposes tool calls, before they run):
+      - read tools (ls, read_file, glob, grep): always allowed
+      - delete: always denied ("禁止删除文件")
+      - write_file / edit_file targeting a NON-existing path (creation):
+          denied ("禁止创建文件")
+      - write_file / edit_file targeting an EXISTING path (modification):
+          paused for human approval via LangGraph `interrupt()`; approved
+          calls proceed, rejected calls return an error ToolMessage.
+    """
+
+    READ_TOOLS = {"ls", "read_file", "glob", "grep"}
+    WRITE_TOOLS = {"write_file", "edit_file"}
+    DENY_TOOLS = {"delete"}
+
+    def _real_path(self, virtual: str) -> Path:
+        p = virtual.replace("\\", "/")
+        while p.startswith("/"):
+            p = p[1:]
+        return PROJECT_DIR / p
+
+    def after_model(self, state, runtime) -> dict | None:
+        messages = state["messages"]
+        if not messages:
+            return None
+        last_ai_msg = next(
+            (m for m in reversed(messages) if isinstance(m, AIMessage)), None
+        )
+        if not last_ai_msg or not getattr(last_ai_msg, "tool_calls", None):
+            return None
+
+        pending: list[tuple[dict, int]] = []  # (tool_call, index)
+        revised: list[dict] = []
+        artificial: list[ToolMessage] = []
+
+        for idx, tc in enumerate(last_ai_msg.tool_calls):
+            name = tc.get("name", "")
+            if name in self.READ_TOOLS:
+                revised.append(tc)
+                continue
+            if name in self.DENY_TOOLS:
+                # Keep the tool_call so the error ToolMessage has a valid
+                # predecessor (API requires tool role to follow tool_calls).
+                revised.append(tc)
+                artificial.append(ToolMessage(
+                    content="禁止删除文件：当前不允许 Agent 执行删除操作。",
+                    name=name, tool_call_id=tc.get("id", ""), status="error",
+                ))
+                continue
+            if name in self.WRITE_TOOLS:
+                fpath = (tc.get("args") or {}).get("file_path", "")
+                exists = fpath and self._real_path(fpath).exists()
+                if not exists:
+                    revised.append(tc)
+                    artificial.append(ToolMessage(
+                        content=f"禁止创建文件：{fpath} 不存在（创建操作不被允许）。",
+                        name=name, tool_call_id=tc.get("id", ""), status="error",
+                    ))
+                    continue
+                # Modification of an existing file -> human approval
+                pending.append((tc, idx))
+                continue
+            # All other tools (web_fetch, web_search, execute, crm, store, ...)
+            revised.append(tc)
+
+        if not pending:
+            last_ai_msg.tool_calls = revised
+            return {"messages": [last_ai_msg, *artificial]}
+
+        # Build HITL-style request
+        action_requests = []
+        review_configs = []
+        for tc, _ in pending:
+            action_requests.append({
+                "name": tc["name"],
+                "args": tc.get("args", {}),
+                "description": f"Agent 请求修改文件。\n工具: {tc['name']}\n参数: {tc.get('args', {})}",
+            })
+            review_configs.append({
+                "action_name": tc["name"],
+                "allowed_decisions": ["approve", "reject"],
+            })
+        hitl_request = {"action_requests": action_requests, "review_configs": review_configs}
+        decisions = interrupt(hitl_request)["decisions"]
+
+        for (tc, _), d in zip(pending, decisions):
+            if d.get("type") == "approve":
+                revised.append(tc)
+            else:
+                # Keep the tool_call so the rejection ToolMessage has a
+                # valid predecessor.
+                revised.append(tc)
+                artificial.append(ToolMessage(
+                    content="用户拒绝了该文件修改请求，工具未执行。",
+                    name=tc["name"], tool_call_id=tc.get("id", ""), status="error",
+                ))
+
+        last_ai_msg.tool_calls = revised
+        return {"messages": [last_ai_msg, *artificial]}
+
+    async def aafter_model(self, state, runtime) -> dict | None:
+        return self.after_model(state, runtime)
 
 from deepagents import (
     create_deep_agent,
@@ -269,6 +378,9 @@ skills = [str(SKILLS_DIR)]
 # --- Rubric Middleware (disabled temporarily, needs grading model) ---
 rubric_middleware = None
 
+# --- Filesystem Safety & Approval Middleware ---
+fs_approval_middleware = FsApprovalMiddleware()
+
 # --- Agent Factory ---
 SYSTEM_PROMPT = """You are a helpful AI coding assistant. Respond in the same language as the user. Be concise and well-structured.
 
@@ -309,7 +421,7 @@ def build_agent(use_search: bool = False):
         skills=skills,
         memory=["/chat-ui/AGENTS.md"],
         tools=tools,
-        middleware=(rubric_middleware,) if rubric_middleware else (),
+        middleware=(fs_approval_middleware,),
         system_prompt=SYSTEM_PROMPT,
     )
 
@@ -366,6 +478,10 @@ class SendMessageRequest(BaseModel):
     session_id: str
     content: str
     use_search: bool = False
+
+class ApproveRequest(BaseModel):
+    approved: bool
+    session_id: str = ""
 
 class UpdateTitleRequest(BaseModel):
     title: str
@@ -571,6 +687,34 @@ def get_context(session_id: str):
     }
 
 # --- Chat API ---
+# Pending human approvals: thread_id -> {"event": asyncio.Event, "decision": dict|None}
+PENDING_APPROVALS: dict[str, dict] = {}
+
+
+async def _wait_approval(thread_id: str) -> dict:
+    """Block the event stream until the user approves/rejects; return the decision."""
+    entry = {"event": asyncio.Event(), "decision": None}
+    PENDING_APPROVALS[thread_id] = entry
+    try:
+        await entry["event"].wait()
+        return entry["decision"]
+    finally:
+        PENDING_APPROVALS.pop(thread_id, None)
+
+
+@app.post("/api/chat/{session_id}/approve")
+async def approve_action(session_id: str, req: ApproveRequest):
+    """Resume an interrupted agent run with the user's approval decision."""
+    thread_id = f"thread_{session_id}"
+    entry = PENDING_APPROVALS.get(thread_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="No pending approval for this session")
+    decision = {"decisions": [{"type": "approve" if req.approved else "reject"}]}
+    entry["decision"] = decision
+    entry["event"].set()
+    return {"ok": True, "approved": req.approved}
+
+
 @app.post("/api/chat")
 async def chat(req: SendMessageRequest):
     db = get_db()
@@ -623,73 +767,93 @@ async def chat(req: SendMessageRequest):
             return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
         try:
-            # Use astream for per-node output (chunks are dicts of node->output)
-            async for chunk in agent.astream(
-                {"messages": messages},
-                config={"configurable": {"thread_id": thread_id}},
-            ):
-                if "__end__" in chunk:
-                    continue
-                for node_name, node_output in chunk.items():
-                    if not isinstance(node_output, dict):
+            # Run the agent, resuming after human approvals. On `__interrupt__`
+            # we emit an approval_request event and block until the user decides.
+            resume: dict | None = None
+            while True:
+                interrupted = False
+                graph_input = (
+                    {"messages": messages}
+                    if resume is None
+                    else Command(resume=resume)
+                )
+                async for chunk in agent.astream(
+                    graph_input,
+                    config={"configurable": {"thread_id": thread_id}},
+                ):
+                    if "__end__" in chunk:
                         continue
-                    msgs = node_output.get("messages", [])
-                    # Emit Agent Loop execution info for the Loop tab
-                    loop_msgs = []
-                    for m in msgs:
-                        mtype = type(m).__name__
-                        preview = str(getattr(m, "content", "") or "")[:200]
-                        loop_msgs.append({"type": mtype, "preview": preview})
-                    yield _emit({
-                        "event": "loop",
-                        "node": node_name,
-                        "msg_types": [type(m).__name__ for m in msgs],
-                        "msg_count": len(msgs),
-                        "msgs": loop_msgs,
-                    })
-                    if not msgs:
-                        continue
-                    last = msgs[-1]
-                    if hasattr(last, "content") and last.content:
-                        text = str(last.content)
-                        if len(text) > len(full_response):
-                            new_text = text[len(full_response):]
-                            full_response = text
-                            yield _emit({"event": "llm_token", "token": new_text, "node": node_name})
-                    # Capture reasoning_content (DeepSeek R1 thinking)
-                    if hasattr(last, "additional_kwargs"):
-                        reasoning = last.additional_kwargs.get("reasoning_content", "")
-                        if reasoning and len(reasoning) > len(full_thinking):
-                            new_thinking = reasoning[len(full_thinking):]
-                            full_thinking = reasoning
-                            yield _emit({"event": "llm_thinking", "thinking": new_thinking, "node": node_name})
-                    # Tool call started (AIMessage with tool_calls)
-                    if hasattr(last, "tool_calls") and getattr(last, "tool_calls", None):
-                        for tc in last.tool_calls:
-                            tc_name = tc.get("name", "tool")
-                            tc_args = tc.get("args", {})
-                            if isinstance(tc_args, str):
-                                try:
-                                    tc_args = json.loads(tc_args)
-                                except Exception:
-                                    pass
-                            args_preview = ""
-                            if tc_args:
-                                try:
-                                    args_preview = json.dumps(tc_args, ensure_ascii=False)[:200]
-                                except Exception:
-                                    args_preview = str(tc_args)[:200]
-                            yield _emit({"event": "tool_start", "status": "tool_start", "name": tc_name, "args": args_preview, "node": node_name})
-                            # write_todos: emit a dedicated todo event with the full list
-                            if tc_name == "write_todos" and isinstance(tc_args, dict):
-                                todos_list = tc_args.get("todos", [])
-                                if isinstance(todos_list, list) and todos_list:
-                                    yield _emit({"event": "todo", "todos": todos_list, "node": node_name})
-                    # Tool call finished (ToolMessage)
-                    if isinstance(last, ToolMessage):
-                        t_status = getattr(last, "status", "success") or "success"
-                        t_result = str(last.content or "")[:300]
-                        yield _emit({"event": "tool_end", "status": "tool_end", "name": getattr(last, "name", "tool"), "tool_status": t_status, "result": t_result, "node": node_name})
+                    if "__interrupt__" in chunk:
+                        # Human approval required (file modification)
+                        val = chunk["__interrupt__"]
+                        payload = val[0].value if isinstance(val, tuple) else val
+                        requests = payload.get("action_requests", []) if isinstance(payload, dict) else []
+                        yield _emit({"event": "approval_request", "requests": requests})
+                        resume = await _wait_approval(thread_id)
+                        interrupted = True
+                        break
+                    for node_name, node_output in chunk.items():
+                        if not isinstance(node_output, dict):
+                            continue
+                        msgs = node_output.get("messages", [])
+                        # Emit Agent Loop execution info for the Loop tab
+                        loop_msgs = []
+                        for m in msgs:
+                            mtype = type(m).__name__
+                            preview = str(getattr(m, "content", "") or "")[:200]
+                            loop_msgs.append({"type": mtype, "preview": preview})
+                        yield _emit({
+                            "event": "loop",
+                            "node": node_name,
+                            "msg_types": [type(m).__name__ for m in msgs],
+                            "msg_count": len(msgs),
+                            "msgs": loop_msgs,
+                        })
+                        if not msgs:
+                            continue
+                        last = msgs[-1]
+                        if hasattr(last, "content") and last.content:
+                            text = str(last.content)
+                            if len(text) > len(full_response):
+                                new_text = text[len(full_response):]
+                                full_response = text
+                                yield _emit({"event": "llm_token", "token": new_text, "node": node_name})
+                        # Capture reasoning_content (DeepSeek R1 thinking)
+                        if hasattr(last, "additional_kwargs"):
+                            reasoning = last.additional_kwargs.get("reasoning_content", "")
+                            if reasoning and len(reasoning) > len(full_thinking):
+                                new_thinking = reasoning[len(full_thinking):]
+                                full_thinking = reasoning
+                                yield _emit({"event": "llm_thinking", "thinking": new_thinking, "node": node_name})
+                        # Tool call started (AIMessage with tool_calls)
+                        if hasattr(last, "tool_calls") and getattr(last, "tool_calls", None):
+                            for tc in last.tool_calls:
+                                tc_name = tc.get("name", "tool")
+                                tc_args = tc.get("args", {})
+                                if isinstance(tc_args, str):
+                                    try:
+                                        tc_args = json.loads(tc_args)
+                                    except Exception:
+                                        pass
+                                args_preview = ""
+                                if tc_args:
+                                    try:
+                                        args_preview = json.dumps(tc_args, ensure_ascii=False)[:200]
+                                    except Exception:
+                                        args_preview = str(tc_args)[:200]
+                                yield _emit({"event": "tool_start", "status": "tool_start", "name": tc_name, "args": args_preview, "node": node_name})
+                                # write_todos: emit a dedicated todo event with the full list
+                                if tc_name == "write_todos" and isinstance(tc_args, dict):
+                                    todos_list = tc_args.get("todos", [])
+                                    if isinstance(todos_list, list) and todos_list:
+                                        yield _emit({"event": "todo", "todos": todos_list, "node": node_name})
+                        # Tool call finished (ToolMessage)
+                        if isinstance(last, ToolMessage):
+                            t_status = getattr(last, "status", "success") or "success"
+                            t_result = str(last.content or "")[:300]
+                            yield _emit({"event": "tool_end", "status": "tool_end", "name": getattr(last, "name", "tool"), "tool_status": t_status, "result": t_result, "node": node_name})
+                if not interrupted:
+                    break  # stream finished
 
             # Save AI response
             ai_msg_id = str(uuid.uuid4())
