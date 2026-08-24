@@ -111,6 +111,12 @@
         .context-section.open .context-section-toggle { transform: rotate(180deg); }
         .context-section-content { display: none; padding: 8px 10px; border-top: 0.5px solid var(--border); font-size: 12px; line-height: 1.6; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; max-height: 400px; overflow-y: auto; }
         .context-section.open .context-section-content { display: block; }
+        .ctx-subtabs { display: flex; gap: 2px; padding: 6px 8px; border-bottom: 1px solid var(--border); flex-wrap: wrap; background: var(--bg-input); position: sticky; top: 0; z-index: 2; }
+        .ctx-subtab { background: none; border: 0.5px solid transparent; border-radius: 6px; padding: 4px 8px; font-size: 11px; color: var(--text-secondary); cursor: pointer; font-family: inherit; transition: all 0.15s; }
+        .ctx-subtab:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .ctx-subtab.active { background: var(--bg-primary); color: var(--accent); border-color: var(--border); font-weight: 600; }
+        .ctx-subview { display: none; padding: 8px; }
+        .ctx-subview.active { display: block; }
         .context-code { background: rgba(0,0,0,0.05); border-radius: 4px; padding: 6px 8px; font-family: 'Fira Code', monospace; font-size: 11px; white-space: pre-wrap; word-break: break-word; }
         .context-msg { padding: 5px 8px; margin-bottom: 4px; border-radius: 6px; font-size: 12px; }
         .context-msg-role { font-weight: 600; font-size: 11px; margin-bottom: 2px; }
@@ -404,47 +410,71 @@
         function renderContextView(data) {
             const view = document.getElementById('ctxContextView');
             // 系统提示词
-            const sysHtml = section('系统提示词', 1, `<div class="context-code">${escapeHtml(data.system_prompt || '(无)')}</div>`);
+            const sysContent = `<div class="context-code">${escapeHtml(data.system_prompt || '(无)')}</div>`;
             // 对话历史
-            let msgsHtml = '';
+            let msgsContent = '';
             if (data.messages && data.messages.length) {
                 data.messages.forEach(m => {
                     const role = m.role || 'user';
                     const preview = (m.content || '').slice(0, 500) + ((m.content || '').length > 500 ? '...' : '');
-                    msgsHtml += `<div class="context-msg role-${role}"><div class="context-msg-role">${role}</div><div>${escapeHtml(preview)}</div></div>`;
+                    msgsContent += `<div class="context-msg role-${role}"><div class="context-msg-role">${role}</div><div>${escapeHtml(preview)}</div></div>`;
                 });
             } else {
-                msgsHtml = '<div style="padding:8px;color:var(--text-secondary)">（暂无对话历史）</div>';
+                msgsContent = '<div style="padding:8px;color:var(--text-secondary)">（暂无对话历史）</div>';
             }
-            const msgsSection = section('对话历史', data.messages ? data.messages.length : 0, msgsHtml);
             // 工具定义
-            let toolsHtml = '';
+            let toolsContent = '';
             const allTools = [...(data.tools || []), ...(data.backend_tools || []).map(t => ({name: t, description: '(内置文件系统/Shell 工具)'}))];
             allTools.forEach(t => {
-                toolsHtml += `<div class="context-tool-item"><div class="context-tool-name">${escapeHtml(t.name)}</div><div class="context-tool-desc">${escapeHtml(t.description || '')}</div></div>`;
+                toolsContent += `<div class="context-tool-item"><div class="context-tool-name">${escapeHtml(t.name)}</div><div class="context-tool-desc">${escapeHtml(t.description || '')}</div></div>`;
             });
-            const toolsSection = section('工具定义', allTools.length, toolsHtml);
             // 技能索引
-            let skillsHtml = '';
+            let skillsContent = '';
             if (data.skills && data.skills.length) {
                 data.skills.forEach(s => {
-                    skillsHtml += `<div class="context-tool-item"><div class="context-tool-name">${escapeHtml(s.name)}</div><div class="context-tool-desc">${escapeHtml(s.summary || '(无摘要)')}</div></div>`;
+                    skillsContent += `<div class="context-tool-item"><div class="context-tool-name">${escapeHtml(s.name)}</div><div class="context-tool-desc">${escapeHtml(s.summary || '(无摘要)')}</div></div>`;
                 });
             } else {
-                skillsHtml = '<div style="padding:8px;color:var(--text-secondary)">（暂无技能）</div>';
+                skillsContent = '<div style="padding:8px;color:var(--text-secondary)">（暂无技能）</div>';
             }
-            const skillsSection = section('技能索引', data.skills ? data.skills.length : 0, skillsHtml);
             // 子 Agent
-            let subsHtml = '';
+            let subsContent = '';
             if (data.subagents && data.subagents.length) {
                 data.subagents.forEach(s => {
-                    subsHtml += `<div class="context-tool-item"><div class="context-tool-name">${escapeHtml(s.name)}</div><div class="context-tool-desc">${escapeHtml(s.description || '')}</div></div>`;
+                    subsContent += `<div class="context-tool-item"><div class="context-tool-name">${escapeHtml(s.name)}</div><div class="context-tool-desc">${escapeHtml(s.description || '')}</div></div>`;
                 });
             } else {
-                subsHtml = '<div style="padding:8px;color:var(--text-secondary)">（暂无）</div>';
+                subsContent = '<div style="padding:8px;color:var(--text-secondary)">（暂无）</div>';
             }
-            const subsSection = section('子 Agent', data.subagents ? data.subagents.length : 0, subsHtml);
-            view.innerHTML = sysHtml + msgsSection + toolsSection + skillsSection + subsSection;
+            const tabs = [
+                { id: 'prompt', label: '提示词', count: 1 },
+                { id: 'history', label: '历史', count: data.messages ? data.messages.length : 0 },
+                { id: 'tools', label: '工具', count: allTools.length },
+                { id: 'skills', label: '技能', count: data.skills ? data.skills.length : 0 },
+                { id: 'subagents', label: '子Agent', count: data.subagents ? data.subagents.length : 0 },
+            ];
+            const subtabsHtml = tabs.map((t, i) =>
+                `<button class="ctx-subtab ${i === 0 ? 'active' : ''}" onclick="switchCtxSubtab('${t.id}')">${escapeHtml(t.label)} <span style="color:var(--text-secondary);font-weight:400">${t.count}</span></button>`
+            ).join('');
+            const views = [
+                { id: 'prompt', html: sysContent },
+                { id: 'history', html: msgsContent },
+                { id: 'tools', html: toolsContent },
+                { id: 'skills', html: skillsContent },
+                { id: 'subagents', html: subsContent },
+            ];
+            const viewsHtml = views.map((v, i) =>
+                `<div class="ctx-subview ${i === 0 ? 'active' : ''}" id="ctxsv-${v.id}">${v.html}</div>`
+            ).join('');
+            view.innerHTML = `<div class="ctx-subtabs">${subtabsHtml}</div>${viewsHtml}`;
+        }
+        function switchCtxSubtab(id) {
+            document.querySelectorAll('.ctx-subtab').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.ctx-subview').forEach(v => v.classList.remove('active'));
+            const btn = [...document.querySelectorAll('.ctx-subtab')].find(b => b.getAttribute('onclick') === `switchCtxSubtab('${id}')`);
+            if (btn) btn.classList.add('active');
+            const sv = document.getElementById('ctxsv-' + id);
+            if (sv) sv.classList.add('active');
         }
         function section(title, count, innerHtml) {
             return `<div class="context-section open">
