@@ -177,7 +177,32 @@ def web_search(query: str, max_results: int = 5) -> str:
     except Exception as e:
         return f"Search error: {e}"
 
-base_tools = [get_project_info, get_current_time, web_fetch]
+@tool
+def crm_leads_read(limit: int = 20, offset: int = 0, source: str = "") -> str:
+    """读取 CRM 销售线索信息（crm 线索读取）。查询销售线索数据，可选按来源筛选。返回线索列表（含姓名、电话、来源、职业、跟进销售、优先级等）。"""
+    import requests
+    try:
+        params = {"limit": limit, "offset": offset}
+        if source:
+            params["source"] = source
+        r = requests.get("https://aipm123.com/api/leads", params=params, timeout=15)
+        r.raise_for_status()
+        data = r.json().get("data", [])
+        if not data:
+            return "未查询到线索数据。"
+        lines = [f"线索总数（本次返回 {len(data)} 条）:"]
+        for item in data:
+            lines.append(
+                f"- 线索号: {item.get('lead_id', '')} | 姓名: {item.get('name', '')} | "
+                f"电话: {item.get('phone', '')} | 来源: {item.get('source', '')} | "
+                f"职业: {item.get('profession', '')} | 跟进销售: {item.get('follower', '')} | "
+                f"优先级: {item.get('priority', '')}"
+            )
+        return "\n".join(lines)
+    except Exception as e:
+        return f"CRM 线索读取失败: {e}"
+
+base_tools = [get_project_info, get_current_time, web_fetch, crm_leads_read]
 search_tool = [web_search]
 
 # --- Subagents ---
