@@ -625,6 +625,11 @@ async def chat(req: SendMessageRequest):
                                 except Exception:
                                     args_preview = str(tc_args)[:200]
                             yield _emit({"event": "tool_start", "status": "tool_start", "name": tc_name, "args": args_preview, "node": node_name})
+                            # write_todos: emit a dedicated todo event with the full list
+                            if tc_name == "write_todos" and isinstance(tc_args, dict):
+                                todos_list = tc_args.get("todos", [])
+                                if isinstance(todos_list, list) and todos_list:
+                                    yield _emit({"event": "todo", "todos": todos_list, "node": node_name})
                     # Tool call finished (ToolMessage)
                     if isinstance(last, ToolMessage):
                         t_status = getattr(last, "status", "success") or "success"

@@ -179,6 +179,27 @@
         .loop-msg-type { font-weight: 600; font-size: 11px; }
         .loop-msg-preview { font-size: 11px; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; max-height: 120px; overflow-y: auto; margin-top: 2px; }
 
+        /* Todo Panel (in-conversation planning display) */
+        .todo-panel { max-width: 800px; margin: 0 auto 12px; padding: 0 24px 0 70px; }
+        .todo-panel-card { background: var(--bg-input); border: 0.5px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+        .todo-panel-title { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; }
+        .todo-panel-title svg { width: 14px; height: 14px; color: var(--accent); }
+        .todo-item { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; font-size: 13px; color: var(--text-primary); border-bottom: 0.5px solid var(--border); }
+        .todo-item:last-child { border-bottom: none; }
+        .todo-status { width: 16px; height: 16px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; margin-top: 1px; }
+        .todo-status.pending { color: #bbb; }
+        .todo-status.in_progress { color: var(--accent); }
+        .todo-status.completed { color: #2e9e5b; }
+        .todo-status svg { width: 14px; height: 14px; }
+        .todo-text { flex: 1; word-break: break-word; }
+        .todo-item.completed .todo-text { color: var(--text-secondary); text-decoration: line-through; }
+        .todo-item.in_progress .todo-text { font-weight: 600; }
+        .todo-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; margin-left: 6px; flex-shrink: 0; }
+        .todo-badge.pending { background: #eee; color: #888; }
+        .todo-badge.in_progress { background: rgba(77,107,254,0.12); color: #4d6bfe; }
+        .todo-badge.completed { background: rgba(46,158,91,0.12); color: #2e9e5b; }
+        .todo-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--accent); border-top-color: transparent; border-radius: 50%; animation: toolspin 0.8s linear infinite; }
+
         .messages-container { flex: 1; overflow-y: auto; padding: 24px 0; }
         .messages-container::-webkit-scrollbar { width: 6px; }
         .messages-container::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
@@ -673,6 +694,35 @@
             view.innerHTML = html;
         }
 
+        // --- Todo Panel (pure HTML generator) ---
+        function todoPanelHtml(todoMap) {
+            const statusIcon = (status) => {
+                if (status === 'completed') return '<svg viewBox="0 0 24 24" fill="none" stroke="#2e9e5b" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>';
+                if (status === 'in_progress') return '<span class="todo-spinner"></span>';
+                return '<svg viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>';
+            };
+            const statusLabel = { pending: '待办', in_progress: '进行中', completed: '已完成' };
+            let items = '';
+            todoMap.forEach((status, content) => {
+                const cls = status === 'completed' ? 'completed' : status === 'in_progress' ? 'in_progress' : '';
+                items += `<div class="todo-item ${cls}">
+                    <span class="todo-status ${status}">${statusIcon(status)}</span>
+                    <span class="todo-text">${escapeHtml(content)}</span>
+                    <span class="todo-badge ${status}">${statusLabel[status] || status}</span>
+                </div>`;
+            });
+            const done = [...todoMap.values()].filter(s => s === 'completed').length;
+            const total = todoMap.size;
+            return `<div class="todo-panel-card">
+                <div class="todo-panel-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><polyline points="9 12 11 14 15 10"/></svg>
+                    <span>任务计划</span>
+                    <span style="margin-left:auto;font-weight:400;color:var(--text-secondary);font-size:11px">${done}/${total} 已完成</span>
+                </div>
+                ${items}
+            </div>`;
+        }
+
         async function loadSessions() {
             const res = await fetch('/api/sessions');
             const sessions = await res.json();
@@ -989,6 +1039,8 @@
             let toolsList = null;
             const toolItems = {};
             let toolSeq = 0;
+            let todoPanel = null;
+            const todoMap = new Map();  // content -> status (dedup, one row per task)
             let thinkingBlock = null;
             let thinkingContent = null;
             abortController = new AbortController();
@@ -1018,6 +1070,19 @@
                             addTimelineEvent(data);
                             if (data.event === 'loop') addLoopEvent(data);
                             updateRunState(data);
+                            if (data.event === 'todo') {
+                                (data.todos || []).forEach(t => {
+                                    const c = (t.content || '').trim();
+                                    if (c) todoMap.set(c, t.status || 'pending');
+                                });
+                                if (!todoPanel) {
+                                    todoPanel = document.createElement('div');
+                                    todoPanel.className = 'todo-panel';
+                                    aiRow.parentNode.insertBefore(todoPanel, aiRow);
+                                }
+                                todoPanel.innerHTML = todoPanelHtml(todoMap);
+                                scrollToBottom();
+                            }
                             if (data.token) { fullText += data.token; bubble.innerHTML = renderMarkdown(fullText); scrollToBottom(); }
                             if (data.thinking) {
                                 if (!thinkingBlock) {
