@@ -179,7 +179,7 @@ def web_search(query: str, max_results: int = 5) -> str:
 
 @tool
 def crm_leads_read(limit: int = 20, offset: int = 0, source: str = "") -> str:
-    """读取 CRM 销售线索信息（crm 线索读取）。查询销售线索数据，可选按来源筛选。返回线索列表（含姓名、电话、来源、职业、跟进销售、优先级等）。"""
+    """读取 CRM 销售线索信息（crm 线索读取）。查询销售线索数据，可选按来源筛选。返回 Markdown 表格（含姓名、电话、来源、职业、跟进销售、优先级等）。"""
     import requests
     try:
         params = {"limit": limit, "offset": offset}
@@ -190,14 +190,20 @@ def crm_leads_read(limit: int = 20, offset: int = 0, source: str = "") -> str:
         data = r.json().get("data", [])
         if not data:
             return "未查询到线索数据。"
-        lines = [f"线索总数（本次返回 {len(data)} 条）:"]
+        headers = ["线索号", "姓名", "电话", "来源", "职业", "跟进销售", "优先级"]
+        lines = ["| " + " | ".join(headers) + " |", "|" + "---|" * len(headers)]
         for item in data:
-            lines.append(
-                f"- 线索号: {item.get('lead_id', '')} | 姓名: {item.get('name', '')} | "
-                f"电话: {item.get('phone', '')} | 来源: {item.get('source', '')} | "
-                f"职业: {item.get('profession', '')} | 跟进销售: {item.get('follower', '')} | "
-                f"优先级: {item.get('priority', '')}"
-            )
+            priority_map = {"high": "高", "medium": "中", "low": "低"}
+            row = [
+                str(item.get("lead_id", "")),
+                str(item.get("name", "")),
+                str(item.get("phone", "")),
+                str(item.get("source", "")),
+                str(item.get("profession", "")),
+                str(item.get("follower", "")),
+                priority_map.get(str(item.get("priority", "")).lower(), str(item.get("priority", ""))),
+            ]
+            lines.append("| " + " | ".join(row) + " |")
         return "\n".join(lines)
     except Exception as e:
         return f"CRM 线索读取失败: {e}"
