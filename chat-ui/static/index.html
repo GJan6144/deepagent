@@ -223,7 +223,7 @@
         .avatar.ai, .avatar.assistant { background: var(--accent); color: white; }
         .avatar.user { background: #c5d8ff; color: #185fa5; }
         .bubble-wrap { max-width: 70%; min-width: 0; }
-        .bubble { padding: 12px 16px; border-radius: 16px; font-size: 15px; line-height: 1.7; word-wrap: break-word; }
+        .bubble { padding: 12px 16px; border-radius: 16px; font-size: 15px; line-height: 1.7; word-wrap: break-word; white-space: pre-line; }
         .bubble.ai, .bubble.assistant { background: var(--bg-ai-bubble); color: var(--text-primary); border-top-left-radius: 4px; }
         .bubble.user { background: var(--bg-user-bubble); color: var(--text-user-bubble); border-top-right-radius: 4px; }
         .bubble p { margin-bottom: 8px; } .bubble p:last-child { margin-bottom: 0; }
@@ -1417,16 +1417,21 @@
             html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
             html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
             html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-            // Lists
-            html = html.replace(/^\d+\.\s(.+)$/gm, '<li>$1</li>');
-            html = html.replace(/^[-*]\s(.+)$/gm, '<li>$1</li>');
-            html = html.replace(/(<li>.*<\/li>)/gs, (m) => '<ul>' + m + '</ul>');
-            // Paragraphs
-            html = html.replace(/\n\n/g, '</p><p>');
+            // Lists: consecutive list lines (blank lines between items allowed)
+            html = html.replace(/((?:^|\n)[ \t]*(?:[-*]|\d+\.)[ \t]+[^\n]*(?:\n[ \t]*(?:\n[ \t]*)?(?:[-*]|\d+\.)[ \t]+[^\n]*)*)/g, (m) => {
+                const lines = m.split('\n').map(l => l.trim()).filter(l => /^(?:[-*]|\d+\.)[ \t]+/.test(l));
+                const items = lines.map(l => '<li>' + l.replace(/^(?:[-*]|\d+\.)[ \t]+/, '') + '</li>').join('');
+                // Keep the leading newline so the paragraph before the list
+                // stays separated (blank line still triggers </p><p>).
+                return (m.startsWith('\n') ? '\n' : '') + '<ul>' + items + '</ul>';
+            });
+            // Paragraphs (blank-line separated) — single newlines are preserved
+            // and displayed via `white-space: pre-line` on .bubble.
+            html = html.replace(/\n{2,}/g, '</p><p>');
             html = '<p>' + html + '</p>';
             html = html.replace(/<p>\s*<\/p>/g, '');
-            html = html.replace(/<p>(<(pre|h[1-3]|ul|li|table))/g, '$1');
-            html = html.replace(/(<\/pre>|<\/h[1-3]>|<\/ul>|<\/table>)<\/p>/g, '$1');
+            html = html.replace(/<p>\s*(<(?:pre|h[1-3]|ul|li|table))/g, '$1');
+            html = html.replace(/(<\/(?:pre|h[1-3]|ul|table)>)\s*<\/p>/g, '$1');
             return html;
         }
 
