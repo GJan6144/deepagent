@@ -453,7 +453,7 @@ def recall_memory(key: str = "") -> str:
     except Exception as e:
         return f"读取记忆失败: {e}"
 
-base_tools = [get_project_info, get_current_time, web_fetch, crm_leads_read, get_weather, store_memory, recall_memory]
+base_tools = [get_project_info, get_current_time, web_fetch, get_weather, store_memory, recall_memory]
 search_tool = [web_search]
 
 # --- Subagents ---
@@ -467,6 +467,41 @@ subagents = [
         name="researcher",
         description="Research technical topics by reading files and documentation",
         system_prompt="You are a research assistant. Read files thoroughly and provide comprehensive summaries.",
+    ),
+    SubAgent(
+        name="crm-stats",
+        description=(
+            "CRM 数据统计 Agent：当用户需要统计 CRM 数据时使用（如统计线索数量、按来源/销售/优先级分组统计、"
+            "各类数据的汇总计数）。此 Agent 负责调用 CRM 取数工具并输出统计结果。"
+        ),
+        system_prompt=(
+            "You are the CRM data statistics specialist. Your job is to fetch CRM data with the "
+            "crm_leads_read tool and produce clear statistics.\n"
+            "Guidelines:\n"
+            "1. Use crm_leads_read to fetch leads (you can use limit/offset/source parameters).\n"
+            "2. Compute statistics: totals, counts by source / follower / priority / profession, etc.\n"
+            "3. Return the result as a Markdown table or bullet list with numbers.\n"
+            "4. Always respond in Chinese. Never paste raw tool output — present summarized statistics."
+        ),
+        tools=[crm_leads_read],
+    ),
+    SubAgent(
+        name="crm-analyst",
+        description=(
+            "CRM 数据分析 Agent：当用户需要分析 CRM 数据时使用（如分析线索质量、转化情况、优先级分布、"
+            "销售跟进效果、数据洞察与建议）。此 Agent 负责深入分析 CRM 数据并输出分析结论。"
+        ),
+        system_prompt=(
+            "You are the CRM data analysis specialist. Your job is to analyze CRM data deeply and "
+            "provide insights.\n"
+            "Guidelines:\n"
+            "1. Use crm_leads_read to fetch the relevant CRM data (adjust limit to get enough records).\n"
+            "2. Analyze: priority distribution, source effectiveness, follower workload, profession mix, "
+            "high-value lead patterns, etc.\n"
+            "3. Provide structured analysis with headings and bullet points, plus actionable suggestions.\n"
+            "4. Always respond in Chinese. Never paste raw tool output — present analyzed insights."
+        ),
+        tools=[crm_leads_read],
     ),
 ]
 
@@ -490,9 +525,15 @@ SYSTEM_PROMPT = """You are a helpful AI coding assistant. Respond in the same la
 - get_weather: query weather forecast for any city (use this for weather questions)
 - web_search: search the web (only when the user has enabled the "智能搜索" toggle)
 - get_current_time: get current date/time in any timezone
-- crm_leads_read: read CRM sales leads via API
 - store_memory / recall_memory: persistent long-term memory (survives restarts, stored in SQLite)
 - Persistent memory at `/chat-ui/AGENTS.md` (already loaded, do not re-read it)
+
+## CRM Data Handling (IMPORTANT)
+- CRM data is ONLY accessible through sub-agents. You do NOT have a direct CRM tool.
+- When the user wants to **统计 CRM 数据** (counts, totals, grouping by source/sales/priority) → delegate to the **crm-stats** sub-agent.
+- When the user wants to **分析 CRM 数据** (quality, trends, insights, suggestions) → delegate to the **crm-analyst** sub-agent.
+- Use the `task` tool to hand off to the sub-agent and wait for its result, then present it to the user in your own words (never paste the raw output).
+- If the request mixes both (e.g. "统计并分析"), you may delegate to both or pick the primary one.
 
 ## CRITICAL Response Rules
 1. **NEVER paste tool output verbatim — this is the #1 rule.** Every tool result is internal data. Whether it is a file list from `ls`, file content from `read_file`, command output, JSON, or search results — you MUST transform it into your own words. Summarize, categorize, extract what matters, and write it as natural Chinese/English prose with structure. Example: if `ls` returns `['/.dockerignore', '/.git/', '/chat-ui/', '/libs/', ...]`, you reply "项目根目录主要包含 chat-ui（Web 界面）、libs（SDK）、examples（示例）等" — you never paste the raw list.
