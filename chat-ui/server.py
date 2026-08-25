@@ -244,9 +244,70 @@ def get_current_time(timezone: str = "Asia/Shanghai") -> str:
         now = datetime.now(_tz.utc)
     return now.strftime("%Y-%m-%d %H:%M:%S %Z")
 
+def _format_weather_summary(data: dict) -> str | None:
+    """Extract a human-readable weather summary from a weather-API JSON
+    payload (e.g. worldweatheronline format) instead of returning raw JSON."""
+    if not isinstance(data, dict):
+        return None
+    has_cc = "current_condition" in data
+    has_days = isinstance(data.get("weather"), list)
+    if not (has_cc or has_days):
+        return None
+    lines = []
+    cc = data.get("current_condition") or []
+    if cc and isinstance(cc[0], dict):
+        c = cc[0]
+        desc = ""
+        wd = c.get("weatherDesc") or []
+        if wd:
+            desc = wd[0].get("value", "") if isinstance(wd[0], dict) else str(wd[0])
+        lines.append(f"当前天气: {desc or '未知'}")
+        lines.append(f"温度: {c.get('temp_C', '?')}°C，体感 {c.get('FeelsLikeC', '?')}°C")
+        lines.append(f"湿度: {c.get('humidity', '?')}%，风速: {c.get('windspeedKmph', '?')} km/h，风向: {c.get('winddir16Point', '?')}")
+    for day in (data.get("weather") or [])[:7]:
+        if not isinstance(day, dict):
+            continue
+        date = day.get("date", "")
+        desc = ""
+        for h in (day.get("hourly") or []):
+            if not isinstance(h, dict):
+                continue
+            if str(h.get("time", "")) in ("900", "1200", "1500"):
+                hd = h.get("weatherDesc") or []
+                if hd:
+                    desc = hd[0].get("value", "") if isinstance(hd[0], dict) else str(hd[0])
+                break
+        lines.append(f"{date}: {day.get('mintempC', '?')}~{day.get('maxtempC', '?')}°C，{desc or '天气未知'}")
+    return "\n".join(lines)
+
+
+def _summarize_json(obj, depth=0, max_depth=3, max_dict_keys=14, max_list_items=4):
+    """Turn a JSON value into a compact, readable summary so the agent never
+    has to handle (or paste) the raw JSON dump."""
+    if depth > max_depth:
+        return "..."
+    if isinstance(obj, dict):
+        parts = []
+        for i, (k, v) in enumerate(obj.items()):
+            if i >= max_dict_keys:
+                parts.append(f"...(+{len(obj) - max_dict_keys} more keys)")
+                break
+            if isinstance(v, (dict, list)):
+                parts.append(f"{k}: {_summarize_json(v, depth + 1, max_depth, max_dict_keys, max_list_items)}")
+            else:
+                parts.append(f"{k}: {v}")
+        return "{" + ", ".join(parts) + "}"
+    if isinstance(obj, list):
+        if len(obj) > max_list_items:
+            shown = [_summarize_json(x, depth + 1, max_depth, max_dict_keys, max_list_items) for x in obj[:max_list_items]]
+            return "[" + ", ".join(shown) + f", ...(共{len(obj)}项)" + "]"
+        return "[" + ", ".join(_summarize_json(x, depth + 1, max_depth, max_dict_keys, max_list_items) for x in obj) + "]"
+    return str(obj)
+
+
 @tool
 def web_fetch(url: str, max_chars: int = 5000) -> str:
-    """Fetch a web page and extract readable text. Use to read articles, docs, or URLs. Returns a summarized view of the content (truncated). The agent must summarize this in its reply, not paste it verbatim."""
+    """Fetch a web page and extract readable text. Use to read articles, docs, or URLs. Returns a summarized view of the content (truncated). JSON API responses are auto-summarized into compact key-value form. The agent must summarize this in its reply, never paste it verbatim."""
     import requests
     from bs4 import BeautifulSoup
     try:
@@ -256,6 +317,23 @@ def web_fetch(url: str, max_chars: int = 5000) -> str:
         }
         r = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
         r.raise_for_status()
+        # JSON API response -> auto-summarize instead of returning raw JSON
+        ctype = (r.headers.get("Content-Type", "") or "").lower()
+        body = r.text or ""
+        stripped = body.lstrip("\ufeff \t\r\n")
+        if "json" in ctype or stripped.startswith("{") or stripped.startswith("["):
+            try:
+                data = json.loads(stripped)
+                # Weather API payloads -> human-readable summary
+                weather_summary = _format_weather_summary(data) if isinstance(data, dict) else None
+                if weather_summary:
+                    return f"Weather API response (extracted):\n{weather_summary}"
+                summary = _summarize_json(data)
+                if len(summary) > max_chars:
+                    summary = summary[:max_chars] + f"\n... (summarized JSON, original {len(body)} chars)"
+                return f"JSON API response (auto-summarized):\n{summary}"
+            except Exception:
+                pass  # not valid JSON after all; fall through to HTML parsing
         # Force UTF-8 decoding to avoid mojibake on non-UTF8 servers
         if r.encoding is None or r.encoding.lower() not in ("utf-8", "utf8"):
             r.encoding = "utf-8"
@@ -268,7 +346,7 @@ def web_fetch(url: str, max_chars: int = 5000) -> str:
         text = "\n".join(line for line in text.split("\n") if line.strip())
         if len(text) > max_chars:
             text = text[:max_chars] + f"\n... (truncated, {len(text)} total chars)"
-        return f"Source: {url}\n\n{text}"
+        return f"Web page content (auto-extracted):\n{text}"
     except Exception as e:
         return f"Error fetching {url}: {e}"
 
@@ -289,6 +367,26 @@ def web_search(query: str, max_results: int = 5) -> str:
         return "\n".join(out)
     except Exception as e:
         return f"Search error: {e}"
+
+@tool
+def get_weather(city: str) -> str:
+    """查询指定城市的天气（天气预报）。city 传城市名（中文或拼音均可，如 '无锡'、'Wuxi'、'上海'、'Beijing'）。返回当前天气和未来几天的气温与天气状况，输出已格式化为中文摘要，直接用即可。"""
+    import requests
+    try:
+        r = requests.get(
+            f"https://wttr.in/{city}?format=j1",
+            timeout=15,
+            headers={"User-Agent": "curl/8.0"},
+        )
+        r.raise_for_status()
+        data = r.json()
+        summary = _format_weather_summary(data) if isinstance(data, dict) else None
+        if summary:
+            return f"{city} 天气：\n{summary}"
+        return f"未找到 {city} 的天气数据。"
+    except Exception as e:
+        return f"天气查询失败: {e}"
+
 
 @tool
 def crm_leads_read(limit: int = 20, offset: int = 0, source: str = "") -> str:
@@ -355,7 +453,7 @@ def recall_memory(key: str = "") -> str:
     except Exception as e:
         return f"读取记忆失败: {e}"
 
-base_tools = [get_project_info, get_current_time, web_fetch, crm_leads_read, store_memory, recall_memory]
+base_tools = [get_project_info, get_current_time, web_fetch, crm_leads_read, get_weather, store_memory, recall_memory]
 search_tool = [web_search]
 
 # --- Subagents ---
@@ -389,6 +487,7 @@ SYSTEM_PROMPT = """You are a helpful AI coding assistant. Respond in the same la
 - Shell execution via `execute` tool
 - Sub-agents (code-reviewer, researcher)
 - web_fetch: read any URL on demand
+- get_weather: query weather forecast for any city (use this for weather questions)
 - web_search: search the web (only when the user has enabled the "智能搜索" toggle)
 - get_current_time: get current date/time in any timezone
 - crm_leads_read: read CRM sales leads via API
